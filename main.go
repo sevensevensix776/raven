@@ -7,14 +7,14 @@
 //	raven hook       # Claude Code Stop/UserPromptSubmit/SessionEnd handler (stdin)
 //	raven serve      # HLS file server and phone control API
 //	raven write      # continuous raw PCM writer (stdout -> pcm.fifo)
-//
-// (diagnose subcommand to follow.)
+//	raven diagnose [--since-min N] # read-only pipeline health report
 package main
 
 import (
 	"fmt"
 	"os"
 
+	"raven-go/internal/diagnose"
 	"raven-go/internal/hook"
 	"raven-go/internal/serve"
 	"raven-go/internal/write"
@@ -36,6 +36,11 @@ func main() {
 	case "write":
 		if err := write.Run(os.Args[2:], os.Stdout); err != nil {
 			fmt.Fprintf(os.Stderr, "raven write: %v\n", err)
+			os.Exit(1)
+		}
+	case "diagnose":
+		if err := diagnose.Run(os.Args[2:], os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "raven diagnose: %v\n", err)
 			os.Exit(1)
 		}
 	default:

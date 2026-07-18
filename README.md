@@ -1,8 +1,8 @@
 # Raven, in Go
 
-Raven speaks Claude Code’s replies through an iPhone so a session can keep moving while its user is driving. This repository is the Go port of Raven’s Claude Code hook—the latency-sensitive front door that runs on every prompt and completed reply. The port is protected by a parity harness that drives the original Bash hook and the Go hook with the same events, then compares their state, transcript, log, and queue output; all five current scenarios pass. Go is a practical fit for the hook’s two-second execution budget: the compiled program starts in roughly 1 ms instead of paying Python’s roughly 50–100 ms interpreter-and-import cost on every turn, ships as one standard-library-only binary, avoids virtual environments and installed-versus-repository drift, and follows the same local-binary convention as `hermes`. The ML boundary stays where it belongs: `synthd` still uses Python, Kokoro, and `mlx-audio`, for which there is no useful Go binding.
+Raven speaks Claude Code’s replies through an iPhone so a session can keep moving while its user is driving. This repository is the completed Go port of Raven’s Bash/Python orchestration and diagnostics. The ML boundary stays where it belongs: `synthd` still uses Python, Kokoro, and `mlx-audio`, for which there is no useful Go binding.
 
-> **Current scope:** `raven hook`, `raven serve`, and `raven write` are implemented. `diagnose` appears in the command usage but is not implemented yet.
+> **Current scope:** All four commands—`raven hook`, `raven serve`, `raven write`, and `raven diagnose`—are implemented. The migration is complete except for the intentionally Python `synthd`.
 
 ## Safety: parity before replacement
 
@@ -23,7 +23,7 @@ The project has no third-party Go dependencies; `go.mod` declares only the modul
 
 | Path | Responsibility |
 | --- | --- |
-| [`main.go`](./main.go) | CLI dispatch. Routes `raven hook`, `raven serve`, and `raven write`. |
+| [`main.go`](./main.go) | CLI dispatch. Routes all four Raven subcommands. |
 | [`internal/hook`](./internal/hook) | Reads Claude Code hook JSON from stdin, updates channel state, applies selection gating, cleans eligible replies, and commits queue files atomically. Resolves `RAVEN_HOME`, falling back to `~/speech`. |
 | [`internal/clean`](./internal/clean) | Pure-Go port of the Bash `sed`/`tr` speech-cleaning pipeline: removes fenced code, inline code, Markdown punctuation, and long paths; collapses whitespace; applies a byte cap. |
 | [`internal/state`](./internal/state) | Maintains `channels.json` and `selection.json` under `.state.lock`: follow/pin semantics, `SessionEnd` removal and unstick, TTL pruning, a 50-channel ceiling, and the last three replies per channel. Writes compact JSON through atomic renames. |
@@ -32,11 +32,13 @@ The project has no third-party Go dependencies; `go.mod` declares only the modul
 | [`internal/transcript`](./internal/transcript) | Adds selected user prompts and emitted Claude captions to `spoken.jsonl`. Serializes updates with `.transcript.lock`, writes atomically, and retains the last 200 lines. |
 | [`internal/serve`](./internal/serve) | Serves `<home>/hls`, updates the listener heartbeat, and implements the phone JSON API with Python-compatible state locking, ETags, health data, selection writes, and phone logs. |
 | [`internal/write`](./internal/write) | Emits uninterrupted 24 kHz mono s16le PCM to stdout, gates queue consumption on listener heartbeat, drives ffmpeg pre-roll/idle/decoding, and provides the synthd-down `say` fallback. |
+| [`internal/diagnose`](./internal/diagnose) | Prints read-only process, stream, queue, channel, event-metric, phone-log, error, and verdict health data with the Python tool’s definitions and ANSI colors. |
 | [`internal/hook/hook_test.go`](./internal/hook/hook_test.go) | Unit coverage for follow selection, queueing, channel gating, `SessionEnd`, and the non-null catch-up invariant. |
 | [`internal/clean/clean_test.go`](./internal/clean/clean_test.go) | Table-driven cleaning tests for code, Markdown, paths, whitespace, blank input, and byte caps. |
 | [`parity_test.py`](./parity_test.py) | Cross-language behavior harness for the installed Bash hook and the local Go binary. |
 | [`serve_parity_test.py`](./serve_parity_test.py) | Starts the Python and Go HTTP handlers against one seeded temporary home and compares control responses, conditional ETags, HLS headers, heartbeat, and log side effects. |
 | [`write_integration.sh`](./write_integration.sh) | Captures fixed-length PCM from Go and the current `writer.sh` in isolated homes, verifies both idle modes and speech RMS, and checks transcript/log/queue side effects. |
+| [`diagnose_parity_test.py`](./diagnose_parity_test.py) | Runs Python and Go diagnostics against the same seeded temporary Raven home and compares every rendered data line after removing ANSI color codes, allowing one second of sequential-run drift in heartbeat age. |
 
 ## Hook flow
 
@@ -91,8 +93,10 @@ The module currently targets Go 1.25.
 cd ~/code/experiments/raven-go
 go build -o raven .
 go test ./...
+go vet ./...
 python3 parity_test.py
 python3 serve_parity_test.py
+python3 diagnose_parity_test.py
 ./write_integration.sh
 install -m 0755 raven ~/.local/bin/raven
 ```
@@ -112,6 +116,12 @@ Without the override, Raven uses `~/speech`:
 
 ```bash
 RAVEN_HOME=/path/to/isolated/speech ~/.local/bin/raven hook
+```
+
+The read-only diagnosis command accepts a lookback window in minutes:
+
+```bash
+raven diagnose --since-min 60
 ```
 
 The server binds `100.64.0.1:8080` by default. `RAVEN_BIND` or `--addr`
@@ -179,17 +189,13 @@ Keep the existing `"timeout": 2`, save `~/.claude/settings.json`, and start a fr
 | Speech synthesis | Python: `synthd`, Kokoro, `mlx-audio` | Intentionally stays Python |
 | HTTP server / phone surface | Go: `raven serve` | Ported and cross-language parity-tested; live cutover remains manual |
 | Writer orchestration | Go: `raven write` | Ported, unit-tested, and PCM parity-tested against `writer.sh`; live cutover remains manual |
-| Diagnostics | Existing Raven tooling | `raven diagnose` is advertised but not implemented |
+| Diagnostics | Go: `raven diagnose` | Ported, unit-tested, and cross-language parity-tested against `diagnose.py` |
 
-## Roadmap
-
-1. **`raven diagnose`** — consolidate health and state inspection once the serving and writing boundaries are stable.
-
-Each port should follow the hook’s migration rule: establish compatibility fixtures first, compare old and new behavior on the same inputs, then change the installed entry point while retaining a rollback path.
+The Bash/Python-to-Go migration is complete. `synthd` deliberately remains Python because Kokoro and `mlx-audio` are the ML boundary.
 
 ## Limits and deliberate tradeoffs
 
-- This repository is not a complete standalone Raven deployment. Today it supplies the Claude Code hook, HTTP server, and PCM writer; the Python synthesizer and separate ffmpeg HLS encoder still complete the path to the phone.
+- This repository is not a complete standalone Raven deployment. It supplies the Claude Code hook, HTTP server, PCM writer, and diagnostics; the Python synthesizer and separate ffmpeg HLS encoder still complete the path to the phone.
 - The implementation uses Unix `flock` through `syscall`, so the state and transcript locking code is Unix-specific.
 - The hook is intentionally fail-silent. That protects Claude Code’s critical path, but operational failures must be diagnosed from Raven’s state, queue, and logs rather than hook stderr.
 - `RAVEN_HOME` must name an existing directory. Raven creates `queue/` and `logs/` beneath it, but a missing home causes an immediate no-op.
