@@ -1,0 +1,36 @@
+flowchart TB
+  subgraph MAC["🖥️  Mac (always on, on the tailnet)"]
+    direction TB
+    HOOK["Stop hook<br/>speak-reply.sh"]:::start
+    GATE{"selected channel?<br/>selection.json"}:::decide
+    QUEUE["queue/&lt;id&gt;.txt<br/>+ .caption.json"]
+    SYN["synthd.py<br/>Kokoro-82M · af_heart"]:::work
+    WAV["queue/&lt;id&gt;.wav"]
+    WRITER["writer.sh<br/>comfort-noise floor<br/>+ clip mux"]:::work
+    ENC["ffmpeg -re<br/>→ HLS segments"]
+    SRV["server.py<br/>/channels /transcript<br/>/active /health /log"]
+    LOG["ravenlog → events.jsonl<br/>diagnose.py"]
+  end
+
+  subgraph NET["🔒 Tailscale"]
+    TS["100.64.0.1:8080<br/>HLS + control API"]
+  end
+
+  subgraph PHONE["📱 iPhone (Raven)"]
+    direction TB
+    AVP["AVPlayer · live edge<br/>non-mixable .playback"]:::work
+    UI["channel picker · transcript<br/>· mute · Now Playing/CarPlay"]
+    EAR["Asif's ear<br/>over CarPlay"]:::done
+  end
+
+  CC["Claude Code turn ends"]:::start --> HOOK
+  HOOK --> GATE
+  GATE -- "no: other channel" --> DROP["dropped (silent)<br/>logged gate_skip"]
+  GATE -- "yes" --> QUEUE
+  QUEUE --> SYN --> WAV --> WRITER --> ENC --> SRV
+  SRV <--> TS <--> AVP
+  AVP --> UI --> EAR
+  SYN -. "say fallback on error" .-> WRITER
+  WRITER -. "emit / preempt / skip" .-> LOG
+  HOOK -. "queued" .-> LOG
+  UI -. "pin channel · upload log" .-> SRV

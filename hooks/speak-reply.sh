@@ -104,7 +104,10 @@ except Exception:
     pass
 PY
 )
-  [ -n "$selected" ] && [ "$session" = "$selected" ] || exit 0
+  if [ -z "$selected" ] || [ "$session" != "$selected" ]; then
+    python3 "$SPEECH/ravenlog.py" hook gate_skip session="$session" selected="$selected" project="$(basename "$cwd")" 2>/dev/null
+    exit 0
+  fi
 fi
 
 text="$raw_text"
@@ -143,4 +146,5 @@ json.dump({
 # Metadata first; the .txt rename is the queue commit marker.
 mv "$meta_tmp" "$Q/$stamp.caption.json" && mv "$text_tmp" "$Q/$stamp.txt"
 rm -f "$text_tmp" "$meta_tmp" 2>/dev/null
+python3 "$SPEECH/ravenlog.py" hook queued id="$stamp" session="$session" project="$project" chars="${#clean}" 2>/dev/null
 exit 0
