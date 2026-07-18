@@ -9,7 +9,7 @@ import sys
 import tempfile
 import time
 
-SPEECH = pathlib.Path.home() / "speech"
+SPEECH = pathlib.Path(os.environ.get("RAVEN_HOME") or pathlib.Path.home() / "speech")
 SPOKEN = SPEECH / "spoken.jsonl"
 LOCK = SPEECH / ".transcript.lock"
 

@@ -167,6 +167,28 @@ class HuginnHandler(http.server.SimpleHTTPRequestHandler):
             self.json_response({"lines": transcript_lines(limit)})
             return
 
+        if parsed.path == "/catchup":
+            # The last few replies of a session, for connect-time catch-up. Works
+            # even for a session never listened to — the hook records every
+            # session's replies into channels.json regardless of selection.
+            session = urllib.parse.parse_qs(parsed.query).get("session", [""])[0]
+            with state_lock():
+                channels = read_json(CHANNELS, [])
+            channel = next((c for c in channels if c.get("session_id") == session), None)
+            lines = []
+            for i, r in enumerate((channel or {}).get("recent", [])):
+                lines.append({
+                    "id": f"catchup-{session[:8]}-{i}-{int(r.get('at', 0))}",
+                    "session_id": session,
+                    "project": (channel or {}).get("project", ""),
+                    "text": r.get("text", ""),
+                    "role": "claude",
+                    "catchup": True,
+                    "spoken_at_epoch": r.get("at", 0),
+                })
+            self.json_response({"lines": lines}, conditional=False)
+            return
+
         if parsed.path.endswith(".m3u8"):
             HB.touch()
         super().do_GET()

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -uo pipefail
 
-SPEECH="$HOME/speech"
+SPEECH="${RAVEN_HOME:-$HOME/speech}"
 Q="$SPEECH/queue"
 SELECTION="$SPEECH/selection.json"
 
@@ -30,7 +30,7 @@ try:
 except Exception:
     pass
 ' 2>/dev/null)
-registry_line=$(printf '%s' "$raw_text" | tr '\n' ' ' | tr -s ' ' | head -c 180)
+registry_line=$(printf '%s' "$raw_text" | tr '\n' ' ' | tr -s ' ' | head -c 280)
 
 # Registry and follow-mode state share one lock with server.py. A phone pin and
 # a UserPromptSubmit can no longer overwrite each other with torn mode/active files.
@@ -64,11 +64,11 @@ with (speech / ".state.lock").open("a+") as lock:
     state = read(selection_path, {
         "mode": "follow", "session_id": None, "follow_session_id": None
     })
-    # Always drop the session's old row; re-add it below unless it just ended.
-    channels = [
-        channel for channel in read(channels_path, [])
-        if channel.get("session_id") != session
-    ]
+    # Carry the session's rolling reply history across the row rebuild.
+    existing = read(channels_path, [])
+    prior = next((c for c in existing if c.get("session_id") == session), {})
+    recent = prior.get("recent", [])
+    channels = [c for c in existing if c.get("session_id") != session]
 
     if event == "SessionEnd":
         # Session quit -> remove it from the picker and unstick any selection
@@ -80,11 +80,17 @@ with (speech / ".state.lock").open("a+") as lock:
             state["session_id"] = state.get("follow_session_id")
         write(selection_path, state)
     else:
+        # On a reply (Stop), keep the last 3 for connect-time catch-up. The hook
+        # sees EVERY session's replies here (before the speech gate), so catch-up
+        # works even for a session you have never listened to.
+        if event == "Stop" and last_line.strip():
+            recent = (recent + [{"text": last_line, "at": now}])[-3:]
         channels.append({
             "session_id": session,
             "project": pathlib.Path(cwd).name if cwd != "-" else "",
             "last_active_epoch": now,
             "last_line": last_line,
+            "recent": recent,
         })
 
     # Backstop for abrupt closes (terminal killed -> no SessionEnd): expire idle

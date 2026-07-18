@@ -17,3 +17,4 @@ spoken.jsonl
 .state.lock
 .bak/
 logs/
+.transcript.lock
