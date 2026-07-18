@@ -38,14 +38,19 @@ while true; do
     -mmin +10 -delete 2>/dev/null
 
   # synthd (warm Kokoro) turns queued *.txt into ready *.wav. Consume ready audio
-  # oldest first; say-synthesize a *.txt ourselves ONLY if it waited >5s (synthd
-  # down). Never silent.
+  # oldest first. Only say-synthesize a *.txt ourselves if synthd is actually
+  # DOWN — never on a mere timeout, or a slow (long) Kokoro synth gets spoken
+  # twice: once robotic here, once nice when synthd's .wav lands. A long reply
+  # can take Kokoro 15s+; we wait for it as long as synthd is alive.
   f=$(ls -1 queue/*.wav queue/*.aiff 2>/dev/null | head -1)
   if [ -z "$f" ]; then
     t=$(ls -1 queue/*.txt 2>/dev/null | head -1)
     if [ -n "$t" ]; then
-      age=$(( $(date +%s) - $(stat -f %m "$t") ))
-      [ "$age" -ge 5 ] && f="$t"
+      synthd_pid=$(cat .synthd.pid 2>/dev/null)
+      if ! kill -0 "$synthd_pid" 2>/dev/null; then
+        age=$(( $(date +%s) - $(stat -f %m "$t") ))
+        [ "$age" -ge 5 ] && f="$t"
+      fi
     fi
   fi
 
