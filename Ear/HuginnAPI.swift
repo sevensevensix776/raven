@@ -137,6 +137,38 @@ final class HuginnAPI: ObservableObject {
         }
     }
 
+    private let logURL: URL = FileManager.default
+        .urls(for: .documentDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("EarPlayback.log")
+
+    /// Ship only new log bytes (since a persisted offset) to the Mac, so both
+    /// sides of the pipeline land in one place for `diagnose.py`.
+    func uploadLog() async {
+        let key = "logUploadOffset"
+        let offset = UInt64(max(0, UserDefaults.standard.integer(forKey: key)))
+        guard let handle = try? FileHandle(forReadingFrom: logURL) else { return }
+        defer { try? handle.close() }
+        do {
+            try handle.seek(toOffset: offset)
+            let data = try handle.readToEnd() ?? Data()
+            guard !data.isEmpty else { return }
+            let lines = String(decoding: data, as: UTF8.self)
+                .split(separator: "\n", omittingEmptySubsequences: true)
+                .map(String.init)
+            guard !lines.isEmpty else { return }
+            var request = URLRequest(url: baseURL.appendingPathComponent("log"))
+            request.httpMethod = "POST"
+            request.timeoutInterval = 5
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            let payload: [String: Any] = ["device": "iphone", "lines": Array(lines.suffix(500))]
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+            let (_, response) = try await session.data(for: request)
+            if let http = response as? HTTPURLResponse, http.statusCode == 200 {
+                UserDefaults.standard.set(Int(offset + UInt64(data.count)), forKey: key)
+            }
+        } catch {}
+    }
+
     private func get(path: String) async throws -> Data? {
         guard let url = URL(string: path, relativeTo: baseURL) else {
             throw URLError(.badURL)

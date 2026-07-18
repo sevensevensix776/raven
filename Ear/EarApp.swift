@@ -46,6 +46,7 @@ struct RootView: View {
             guard scenePhase == .active else { return }
             await api.refreshChannels()
             await api.refreshTranscript()
+            await api.uploadLog()
             var tick = 0
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 5_000_000_000)
@@ -55,13 +56,16 @@ struct RootView: View {
                 if tick.isMultiple(of: 2) {
                     await api.refreshChannels()
                 }
+                if tick.isMultiple(of: 6) {  // ~30s: ship new playback-log bytes
+                    await api.uploadLog()
+                }
             }
         }
     }
 
     private var header: some View {
         HStack(spacing: 12) {
-            Image("Huginn")
+            Image("Raven")
                 .resizable()
                 .scaledToFit()
                 .frame(width: 44, height: 44)
@@ -72,7 +76,7 @@ struct RootView: View {
                 )
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Huginn")
+                Text("Raven")
                     .font(.title2.weight(.semibold))
                     .foregroundStyle(.white)
                 Text(api.channelLabel)
@@ -95,7 +99,7 @@ struct RootView: View {
                         ContentUnavailableView(
                             "Nothing spoken yet",
                             systemImage: "text.bubble",
-                            description: Text("Replies will appear here as Huginn speaks them.")
+                            description: Text("Replies will appear here as Raven speaks them.")
                         )
                         .foregroundStyle(.white.opacity(0.55))
                         .frame(maxWidth: .infinity)

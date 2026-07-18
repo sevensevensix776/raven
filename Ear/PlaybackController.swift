@@ -518,7 +518,7 @@ final class PlaybackController: NSObject, ObservableObject {
 
     private func updateNowPlaying(rate: Float) {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = [
-            MPMediaItemPropertyTitle: "Ear",
+            MPMediaItemPropertyTitle: "Raven",
             MPMediaItemPropertyArtist: "Live from Mac",
             MPNowPlayingInfoPropertyIsLiveStream: true,
             MPNowPlayingInfoPropertyPlaybackRate: rate,
