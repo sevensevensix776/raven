@@ -22,7 +22,8 @@ type Recent struct {
 type Channel struct {
 	SessionID       string   `json:"session_id"`
 	Project         string   `json:"project"`
-	Name            string   `json:"name"` // Remote Control session title (custom/ai); "" if unknown
+	Name            string   `json:"name"`            // Remote Control session title (custom/ai); "" if unknown
+	TranscriptPath  string   `json:"transcript_path"` // so the server can re-read the title for idle renames
 	LastActiveEpoch float64  `json:"last_active_epoch"`
 	LastLine        string   `json:"last_line"`
 	Recent          []Recent `json:"recent"`
@@ -37,7 +38,7 @@ type Selection struct {
 // UpdateRegistry mirrors the Python registry block exactly, including the order
 // of operations (SessionEnd unsticks selection before `pinned` is computed; the
 // UserPromptSubmit follow-write happens last).
-func UpdateRegistry(home, event, session, cwd, lastLine, name string, ttlHours float64) {
+func UpdateRegistry(home, event, session, cwd, lastLine, name, transcriptPath string, ttlHours float64) {
 	unlock, err := Lock(home)
 	if err != nil {
 		return
@@ -53,6 +54,7 @@ func UpdateRegistry(home, event, session, cwd, lastLine, name string, ttlHours f
 	recent := []Recent{}
 	priorName := ""
 	priorLine := ""
+	priorPath := ""
 	rest := existing[:0:0]
 	for _, c := range existing {
 		if c.SessionID == session {
@@ -61,6 +63,7 @@ func UpdateRegistry(home, event, session, cwd, lastLine, name string, ttlHours f
 			}
 			priorName = c.Name
 			priorLine = c.LastLine
+			priorPath = c.TranscriptPath
 			continue
 		}
 		rest = append(rest, c)
@@ -71,6 +74,9 @@ func UpdateRegistry(home, event, session, cwd, lastLine, name string, ttlHours f
 	}
 	if lastLine == "" {
 		lastLine = priorLine // don't blank the preview on empty/system-injected events
+	}
+	if transcriptPath == "" {
+		transcriptPath = priorPath
 	}
 
 	if event == "SessionEnd" {
@@ -97,6 +103,7 @@ func UpdateRegistry(home, event, session, cwd, lastLine, name string, ttlHours f
 			SessionID:       session,
 			Project:         project,
 			Name:            name,
+			TranscriptPath:  transcriptPath,
 			LastActiveEpoch: now,
 			LastLine:        lastLine,
 			Recent:          recent, // never nil -> marshals as [], not null

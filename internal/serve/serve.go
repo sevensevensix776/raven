@@ -21,6 +21,7 @@ import (
 	"unicode/utf8"
 
 	"raven-go/internal/hook"
+	"raven-go/internal/rctitle"
 	"raven-go/internal/rlog"
 	"raven-go/internal/state"
 )
@@ -37,6 +38,8 @@ type selectionResponse struct {
 	Mode      string  `json:"mode"`
 	SessionID *string `json:"session_id"`
 }
+
+var titleResolver = rctitle.NewResolver()
 
 type channelsResponse struct {
 	Channels  []state.Channel   `json:"channels"`
@@ -259,6 +262,15 @@ func (h *handler) handleChannels(w http.ResponseWriter, r *http.Request) {
 	channels := state.ReadChannels(h.home)
 	selection := state.ReadSelection(h.home)
 	unlock()
+
+	// Freshen the Remote Control name from each session's transcript so a rename
+	// on an IDLE session (which won't fire the hook) still shows. Cached by file
+	// mtime, so unchanged transcripts aren't re-scanned.
+	for i := range channels {
+		if fresh := titleResolver.Resolve(channels[i].TranscriptPath); fresh != "" {
+			channels[i].Name = fresh
+		}
+	}
 
 	sort.SliceStable(channels, func(i, j int) bool {
 		return channels[i].LastActiveEpoch > channels[j].LastActiveEpoch
