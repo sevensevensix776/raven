@@ -1,0 +1,54 @@
+<!doctype html>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Claude</title>
+<style>
+  body{font:600 1.3rem system-ui;display:grid;place-items:center;gap:1.5rem;
+       height:100vh;margin:0;background:#111;color:#eee;text-align:center}
+  button{font:inherit;padding:2rem 3rem;border-radius:1rem;border:0;
+         background:#2d6;color:#000}
+  #log{font:400 .9rem ui-monospace,monospace;color:#888;min-height:3em;padding:0 1rem}
+</style>
+
+<!-- One <audio>, one src, started by a real tap. No hls.js, no MediaSource,
+     no src swapping. JS does not run to completion in a backgrounded tab, so
+     nothing in the playback loop may depend on it. -->
+<audio id="a" src="/stream.m3u8" playsinline></audio>
+<button id="b">▶︎ Start</button>
+<div id="log">not started</div>
+
+<script>
+  const a = document.getElementById('a');
+  const b = document.getElementById('b');
+  const log = document.getElementById('log');
+
+  const stamp = () => new Date().toLocaleTimeString();
+  const say = (m) => { log.textContent = m + '  ·  ' + stamp(); };
+
+  b.onclick = async () => {
+    // Web analogue of a non-mixable AVAudioSession category. Must be set
+    // before play(). Guards against being classified Ambient, which iOS
+    // suspends on backgrounding.
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+
+    try {
+      await a.play();
+      b.textContent = '● Live';
+      say('playing');
+    } catch (e) {
+      say('play() rejected: ' + e.message);
+      return;
+    }
+
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({ title: 'Claude', artist: 'Mac' });
+      navigator.mediaSession.setActionHandler('play', () => a.play());
+      navigator.mediaSession.setActionHandler('pause', () => a.pause());
+    }
+  };
+
+  // Diagnostics only — these will NOT run reliably while backgrounded.
+  // Read them after unlocking to see what happened, not to recover.
+  for (const ev of ['stalled', 'waiting', 'error', 'ended', 'pause', 'playing']) {
+    a.addEventListener(ev, () => say('event: ' + ev));
+  }
+</script>

@@ -1,0 +1,13 @@
+# Runtime / generated — never commit
+.venv/
+__pycache__/
+*.pyc
+pcm.fifo
+hls/*.ts
+hls/*.m3u8
+hls/.heartbeat
+queue/
+*.pid
+.detached.log
+active
+speak-all
