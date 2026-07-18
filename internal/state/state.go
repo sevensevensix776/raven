@@ -22,6 +22,7 @@ type Recent struct {
 type Channel struct {
 	SessionID       string   `json:"session_id"`
 	Project         string   `json:"project"`
+	Name            string   `json:"name"` // Remote Control session title (custom/ai); "" if unknown
 	LastActiveEpoch float64  `json:"last_active_epoch"`
 	LastLine        string   `json:"last_line"`
 	Recent          []Recent `json:"recent"`
@@ -36,7 +37,7 @@ type Selection struct {
 // UpdateRegistry mirrors the Python registry block exactly, including the order
 // of operations (SessionEnd unsticks selection before `pinned` is computed; the
 // UserPromptSubmit follow-write happens last).
-func UpdateRegistry(home, event, session, cwd, lastLine string, ttlHours float64) {
+func UpdateRegistry(home, event, session, cwd, lastLine, name string, ttlHours float64) {
 	unlock, err := Lock(home)
 	if err != nil {
 		return
@@ -47,19 +48,30 @@ func UpdateRegistry(home, event, session, cwd, lastLine string, ttlHours float64
 	sel := ReadSelection(home)
 	existing := ReadChannels(home)
 
-	// Carry the session's rolling reply history across the row rebuild.
+	// Carry the session's rolling reply history + Remote Control name across the
+	// row rebuild. A freshly-read non-empty name wins; otherwise keep the prior.
 	recent := []Recent{}
+	priorName := ""
+	priorLine := ""
 	rest := existing[:0:0]
 	for _, c := range existing {
 		if c.SessionID == session {
 			if c.Recent != nil {
 				recent = c.Recent
 			}
+			priorName = c.Name
+			priorLine = c.LastLine
 			continue
 		}
 		rest = append(rest, c)
 	}
 	channels := rest
+	if name == "" {
+		name = priorName
+	}
+	if lastLine == "" {
+		lastLine = priorLine // don't blank the preview on empty/system-injected events
+	}
 
 	if event == "SessionEnd" {
 		if sel.FollowSessionID != nil && *sel.FollowSessionID == session {
@@ -84,6 +96,7 @@ func UpdateRegistry(home, event, session, cwd, lastLine string, ttlHours float64
 		channels = append(channels, Channel{
 			SessionID:       session,
 			Project:         project,
+			Name:            name,
 			LastActiveEpoch: now,
 			LastLine:        lastLine,
 			Recent:          recent, // never nil -> marshals as [], not null

@@ -4,6 +4,8 @@
 package hook
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"io"
 	"os"
@@ -20,11 +22,12 @@ import (
 )
 
 type payload struct {
-	Event   string `json:"hook_event_name"`
-	Session string `json:"session_id"`
-	Cwd     string `json:"cwd"`
-	Message string `json:"last_assistant_message"`
-	Prompt  string `json:"prompt"`
+	Event          string `json:"hook_event_name"`
+	Session        string `json:"session_id"`
+	Cwd            string `json:"cwd"`
+	Message        string `json:"last_assistant_message"`
+	Prompt         string `json:"prompt"`
+	TranscriptPath string `json:"transcript_path"`
 }
 
 type caption struct {
@@ -66,8 +69,14 @@ func Run(stdin io.Reader) {
 		rawText = p.Prompt
 	}
 
+	// Don't let a system-injected event (task notification) become the channel
+	// preview; the registry keeps the prior line when this is empty.
 	registryLine := clean.Collapse(rawText, 280)
-	state.UpdateRegistry(home, event, session, cwd, registryLine, cfg.ChannelTTLHours)
+	if isSystemInjected(rawText) {
+		registryLine = ""
+	}
+	name := titleFromTranscript(p.TranscriptPath)
+	state.UpdateRegistry(home, event, session, cwd, registryLine, name, cfg.ChannelTTLHours)
 
 	switch event {
 	case "UserPromptSubmit":
@@ -144,6 +153,46 @@ func dashDefault(s string) string {
 func speakAll(home string) bool {
 	_, err := os.Stat(filepath.Join(home, "speak-all"))
 	return err == nil
+}
+
+// titleFromTranscript reads the session's Remote Control name from its transcript
+// JSONL: the last `customTitle` (user-set) wins, else the last `aiTitle`. Returns
+// "" if the path is empty/unreadable. Scans the file; renames are rare so callers
+// cache the result in channels.json.
+func titleFromTranscript(path string) string {
+	if path == "" {
+		return ""
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
+	var custom, ai string
+	for sc.Scan() {
+		line := sc.Bytes()
+		if bytes.Contains(line, []byte(`"customTitle"`)) {
+			var e struct {
+				CustomTitle string `json:"customTitle"`
+			}
+			if json.Unmarshal(line, &e) == nil && e.CustomTitle != "" {
+				custom = e.CustomTitle
+			}
+		} else if bytes.Contains(line, []byte(`"aiTitle"`)) {
+			var e struct {
+				AiTitle string `json:"aiTitle"`
+			}
+			if json.Unmarshal(line, &e) == nil && e.AiTitle != "" {
+				ai = e.AiTitle
+			}
+		}
+	}
+	if custom != "" {
+		return custom
+	}
+	return ai
 }
 
 // isSystemInjected reports whether a UserPromptSubmit prompt is actually a
