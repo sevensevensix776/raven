@@ -70,8 +70,8 @@ def norm(obj):
     if isinstance(obj, dict):
         out = {}
         for k, v in obj.items():
-            if k == "name":
-                continue  # Go-only field, absent in the frozen bash hook
+            if k in ("name", "display"):
+                continue  # Go-only fields, absent in the frozen bash hook
             if k in ("last_active_epoch", "at", "spoken_at_epoch", "ts"):
                 out[k] = "<TS>"
             elif k in ("id",):

@@ -55,6 +55,43 @@ func TestFollowActivatesAndQueues(t *testing.T) {
 	}
 }
 
+func TestCaptionKeepsSpokenTextAndAddsReadableDisplay(t *testing.T) {
+	dir := setup(t)
+	fire(t, map[string]any{
+		"hook_event_name": "UserPromptSubmit", "session_id": "A", "cwd": "/x/raven-go", "prompt": "make it readable",
+	})
+	reply := "Done.\n\n- Updated **the parser** at `/Users/asif/code/experiments/raven-go/main.go`.\n```go\nfmt.Println(\"noise\")\n```\n\nTests pass."
+	fire(t, map[string]any{
+		"hook_event_name": "Stop", "session_id": "A", "cwd": "/x/raven-go", "last_assistant_message": reply,
+	})
+
+	captions, _ := filepath.Glob(filepath.Join(dir, "queue", "*.caption.json"))
+	if len(captions) != 1 {
+		t.Fatalf("expected 1 caption, got %d", len(captions))
+	}
+	var got caption
+	readJSON(t, captions[0], &got)
+	if got.Text != "Done. - Updated the parser at . Tests pass." {
+		t.Fatalf("spoken caption text changed: %q", got.Text)
+	}
+	wantDisplay := "Done.\n\n- Updated **the parser** at `/Users/asif/code/experiments/raven-go/main.go`.\n[code]\n\nTests pass."
+	if got.Display != wantDisplay {
+		t.Fatalf("display caption\n got %q\nwant %q", got.Display, wantDisplay)
+	}
+
+	txts, _ := filepath.Glob(filepath.Join(dir, "queue", "*.txt"))
+	if len(txts) != 1 {
+		t.Fatalf("expected 1 queued .txt, got %d", len(txts))
+	}
+	spoken, err := os.ReadFile(txts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(spoken) != "In raven-go. "+got.Text {
+		t.Fatalf("speech queue must still use spoken text, got %q", spoken)
+	}
+}
+
 func TestGateSkipsOtherSession(t *testing.T) {
 	dir := setup(t)
 	os.WriteFile(filepath.Join(dir, "selection.json"),

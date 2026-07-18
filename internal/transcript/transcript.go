@@ -35,7 +35,8 @@ func AddUser(home, session, project, text string) {
 }
 
 // AddClaude reads a queued caption and records it when the writer starts
-// emitting the associated clip. Malformed or missing captions are ignored.
+// emitting the associated clip. Additive caption fields such as display pass
+// through unchanged. Malformed or missing captions are ignored.
 func AddClaude(home, captionPath string) {
 	b, err := os.ReadFile(captionPath)
 	if err != nil {

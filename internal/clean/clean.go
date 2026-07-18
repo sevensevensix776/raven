@@ -42,15 +42,29 @@ func Reply(text string, cap int) string {
 	return text
 }
 
+// Display cleans an assistant reply for reading without flattening its
+// structure. Fenced code is deliberately summarized because full code blocks
+// are noisy in the driving UI; all other Markdown and line breaks are retained.
+func Display(text string) string {
+	return replaceFencedBlocks(text, "[code]")
+}
+
 // dropFencedBlocks deletes lines from an opening ``` fence line through the next
 // fence line inclusive, matching sed's `/re/,/re/d` range (an unterminated fence
 // deletes to end of input).
 func dropFencedBlocks(text string) string {
+	return replaceFencedBlocks(text, "")
+}
+
+func replaceFencedBlocks(text, replacement string) string {
 	lines := strings.Split(text, "\n")
 	var kept []string
 	inFence := false
 	for _, ln := range lines {
 		if fenceLine.MatchString(ln) {
+			if !inFence && replacement != "" {
+				kept = append(kept, replacement)
+			}
 			inFence = !inFence
 			continue // the fence line itself is deleted in both states
 		}

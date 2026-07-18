@@ -33,6 +33,42 @@ func TestReply(t *testing.T) {
 	}
 }
 
+func TestDisplay(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			"preserves markdown and line breaks",
+			"## Result\n\n- **Bold** and _italic_\n- Run `go test ./...`",
+			"## Result\n\n- **Bold** and _italic_\n- Run `go test ./...`",
+		},
+		{
+			"fenced block becomes marker",
+			"Here is the change:\n```go\nfmt.Println(1)\n```\n\nDone.",
+			"Here is the change:\n[code]\n\nDone.",
+		},
+		{
+			"multiple fenced blocks",
+			"First\n```\none\n```\nMiddle\n```swift\ntwo\n```\nLast",
+			"First\n[code]\nMiddle\n[code]\nLast",
+		},
+		{
+			"unterminated fenced block",
+			"Before\n```json\n{\"unfinished\":true}",
+			"Before\n[code]",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := Display(c.in); got != c.want {
+				t.Errorf("Display(%q)\n got %q\nwant %q", c.in, got, c.want)
+			}
+		})
+	}
+}
+
 func TestIsBlank(t *testing.T) {
 	for _, c := range []struct {
 		in   string

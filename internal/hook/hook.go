@@ -35,6 +35,7 @@ type caption struct {
 	SessionID string `json:"session_id"`
 	Project   string `json:"project"`
 	Text      string `json:"text"`
+	Display   string `json:"display"`
 }
 
 // Home resolves the Raven dir: RAVEN_HOME override (for tests) else ~/speech.
@@ -124,7 +125,10 @@ func Run(stdin io.Reader) {
 	if project != "" {
 		spoken = "In " + project + ". " + cleaned
 	}
-	meta, err := json.Marshal(caption{ID: stamp, SessionID: session, Project: project, Text: cleaned})
+	meta, err := json.Marshal(caption{
+		ID: stamp, SessionID: session, Project: project, Text: cleaned,
+		Display: clean.Display(rawText),
+	})
 	if err != nil {
 		return
 	}

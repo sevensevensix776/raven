@@ -11,7 +11,7 @@ import (
 func TestAddClaudeFromCaption(t *testing.T) {
 	home := t.TempDir()
 	caption := filepath.Join(home, "123.caption.json")
-	if err := os.WriteFile(caption, []byte(`{"session_id":"s","project":"p","text":"hello"}`), 0o644); err != nil {
+	if err := os.WriteFile(caption, []byte(`{"session_id":"s","project":"p","text":"hello","display":"**hello**\n\n- detail"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	AddClaude(home, caption)
@@ -34,6 +34,9 @@ func TestAddClaudeFromCaption(t *testing.T) {
 	}
 	if entry["id"] != "123" || entry["role"] != "claude" || entry["text"] != "hello" {
 		t.Fatalf("unexpected Claude entry: %#v", entry)
+	}
+	if entry["display"] != "**hello**\n\n- detail" {
+		t.Fatalf("display not carried through: %#v", entry)
 	}
 	if _, ok := entry["spoken_at_epoch"].(float64); !ok {
 		t.Fatalf("spoken_at_epoch missing: %#v", entry)

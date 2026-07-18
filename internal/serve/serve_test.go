@@ -1,12 +1,33 @@
 package serve
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestTranscriptLinesPreservesAdditiveFields(t *testing.T) {
+	home := t.TempDir()
+	spoken := `{"id":"new","text":"spoken","display":"**Readable**\n\n- item"}` + "\n"
+	if err := os.WriteFile(filepath.Join(home, "spoken.jsonl"), []byte(spoken), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	lines := transcriptLines(home, 50)
+	if len(lines) != 1 {
+		t.Fatalf("got %d transcript lines, want 1", len(lines))
+	}
+	var line map[string]any
+	if err := json.Unmarshal(lines[0], &line); err != nil {
+		t.Fatal(err)
+	}
+	if line["display"] != "**Readable**\n\n- item" {
+		t.Fatalf("serve dropped display: %#v", line)
+	}
+}
 
 func TestETag(t *testing.T) {
 	got := etag([]byte("abc"))
