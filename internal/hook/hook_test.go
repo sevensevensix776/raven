@@ -98,3 +98,21 @@ func TestRecentIsNeverNull(t *testing.T) {
 		t.Errorf("recent must be [] not null: %s", b)
 	}
 }
+
+func TestSystemInjectedNotRecordedAsUser(t *testing.T) {
+	dir := setup(t)
+	// A task-notification injected as a UserPromptSubmit must NOT hit the transcript.
+	fire(t, map[string]any{
+		"hook_event_name": "UserPromptSubmit", "session_id": "A", "cwd": "/x/api",
+		"prompt": "<task-notification>\n<task-id>xyz</task-id>\n<status>completed</status>\n</task-notification>",
+	})
+	if b, err := os.ReadFile(filepath.Join(dir, "spoken.jsonl")); err == nil && len(b) > 0 {
+		t.Errorf("system-injected prompt leaked into transcript: %s", b)
+	}
+	// A real prompt still records.
+	fire(t, map[string]any{"hook_event_name": "UserPromptSubmit", "session_id": "A", "cwd": "/x/api", "prompt": "real user question"})
+	b, _ := os.ReadFile(filepath.Join(dir, "spoken.jsonl"))
+	if !strings.Contains(string(b), "real user question") {
+		t.Errorf("real prompt should be recorded, got %q", b)
+	}
+}

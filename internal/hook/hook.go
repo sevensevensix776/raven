@@ -73,7 +73,10 @@ func Run(stdin io.Reader) {
 	case "UserPromptSubmit":
 		// Record the prompt in the transcript (screen only) for the selected
 		// channel — the registry above already made it active in follow mode.
-		if speakAll(home) || session == state.SelectedSession(home) {
+		// Skip harness-injected messages (task notifications, system reminders):
+		// Claude Code surfaces those as user-role prompts, but they are not the
+		// user talking and must not pollute the transcript.
+		if !isSystemInjected(rawText) && (speakAll(home) || session == state.SelectedSession(home)) {
 			userText := strings.Join(strings.Fields(rawText), " ")
 			if len(userText) > 600 {
 				userText = userText[:600]
@@ -141,6 +144,25 @@ func dashDefault(s string) string {
 func speakAll(home string) bool {
 	_, err := os.Stat(filepath.Join(home, "speak-all"))
 	return err == nil
+}
+
+// isSystemInjected reports whether a UserPromptSubmit prompt is actually a
+// harness-injected message (async task notification, system reminder) rather
+// than the user typing. Claude Code delivers these as user-role prompts.
+func isSystemInjected(text string) bool {
+	t := strings.TrimSpace(text)
+	for _, marker := range []string{
+		"<task-notification>",
+		"[SYSTEM NOTIFICATION - NOT USER INPUT]",
+		"<system-reminder>",
+		"<command-name>",
+		"<local-command-stdout>",
+	} {
+		if strings.Contains(t, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // projectName mirrors bash: basename(cwd), empty for "-" / missing.
