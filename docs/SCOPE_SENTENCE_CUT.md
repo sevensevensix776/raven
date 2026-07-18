@@ -4,7 +4,16 @@ This document defines a stage-2 refinement to Raven's committed latest-wins inte
 
 ## Status
 
-**Stage 2; not implemented.** The baseline hard-interrupt design is recorded in [`INTERRUPT_DESIGN.md`](INTERRUPT_DESIGN.md) and should be built and device-proven first. The current production writer plays a ready clip to completion and does not yet implement either hard latest-wins or manual Skip.
+**Stage 2; not implemented.** This policy has two prerequisites:
+
+1. [`SCOPE_STREAMING_SYNTHESIS.md`](SCOPE_STREAMING_SYNTHESIS.md) supplies the
+   ordered per-reply part protocol and must be implemented first; and
+2. [`INTERRUPT_DESIGN.md`](INTERRUPT_DESIGN.md) supplies the latest-wins and
+   manual-Skip control plane and must be device-proven before automatic
+   boundary cuts are enabled.
+
+The current production writer plays a ready clip to completion and does not yet
+implement streaming parts, hard latest-wins, or manual Skip.
 
 This scope refines the *automatic* preemption point. It does not replace the latest-wins selection model, queue coalescing, `.latest`/`.interrupt` control files, or the persistent-encoder rules in the baseline design.
 
@@ -25,55 +34,57 @@ automatic latest-wins:        finish chunk 3 → idle bridge → newest reply
 manual Skip:                  terminate chunk 3 now → idle bridge → idle/newest
 ```
 
-- Kokoro publishes ordered chunks that each contain complete sentence boundaries and target roughly 8–15 seconds of speech.
+- Kokoro publishes the ordered, sentence-aware parts defined by
+  `SCOPE_STREAMING_SYNTHESIS.md`; their measured duration becomes the initial
+  automatic-preemption window.
 - The writer checks `queue/.latest` between chunks.
 - If `.latest` points to a newer utterance, the writer stops the old utterance before opening its next chunk.
 - A manual `/skip` changes the interrupt token and still terminates the active per-clip decoder immediately.
 - The writer, FIFO, and persistent HLS encoder never stop during either transition.
 
-The 8–15-second window is a target, not a promise. A single long sentence may exceed it; several short sentences may be grouped. Sentence integrity wins over hitting an exact duration unless a separate maximum-safety policy is added later.
+Stage 2 should first use the parts Kokoro/misaki already yields. If device tests
+show those boundaries are too short, too long, or not consistently semantic,
+group adjacent yielded parts in `synthd` without changing the queue protocol.
+Sentence integrity wins over an exact duration target unless a separate
+maximum-safety policy is added later.
 
 ## Synthesis changes
 
-Today `synthd.py` asks Kokoro to generate the full reply, concatenates every returned audio segment, and atomically publishes one `<stamp>.wav`. Stage 2 requires an ordered chunk set.
+Do not introduce a second part format, manifest, tokenizer, or transcript model.
+Reuse the exact `queue/<stamp>/001.wav...complete.json` protocol in
+[`SCOPE_STREAMING_SYNTHESIS.md`](SCOPE_STREAMING_SYNTHESIS.md). That scope owns
+atomic publication, contiguous numbering, completeness, partial failure,
+restart cursors, prefix placement, transcript timing, and per-reply `say`
+fallback.
 
-### 1. Segment text at sentence boundaries
+Sentence cut adds only latest-wins awareness around that protocol:
 
-Split the final spoken text—verbatim or summarized—into sentences, preserving punctuation. Group adjacent sentences into chunks whose estimated spoken duration is near 8–15 seconds. Avoid a regex that treats every period as a sentence; abbreviations, decimals, paths, and initials need either the tokenizer already available in the Kokoro/misaki stack or a tested sentence segmenter.
+- before spending compute on the next unpublished part, `synthd` may stop work
+  on a superseded reply according to `INTERRUPT_DESIGN.md`;
+- already published parts remain immutable; and
+- if synthesis is terminated early, publish the protocol's terminal partial
+  marker so the writer cannot wait forever or interleave replies accidentally.
 
-### 2. Synthesize chunks independently
-
-Render each group with the same model, voice, speed, and 24 kHz output format. Independent synthesis is intentional: each chunk needs to be a disposable decoder input. Preserve ordering with stable names such as:
-
-```text
-<stamp>.000.wav
-<stamp>.001.wav
-<stamp>.002.wav
-```
-
-Each chunk must still use a temporary file and atomic rename. A small manifest should be published last so the writer never starts a partially synthesized sequence. The manifest should contain the utterance ID, ordered chunk names, and spoken-text offsets or sentence indexes for transcript accounting.
-
-### 3. Respect latest-wins while synthesizing
-
-Before starting each chunk and before publishing the manifest, compare the utterance ID with `queue/.latest`. If the job is no longer latest, stop spending synthesis time and remove its unpublished artifacts. The rules from `INTERRUPT_DESIGN.md` remain authoritative for queue locking and commit order.
-
-### 4. Preserve fallback behavior
-
-If chunked Kokoro synthesis fails, Raven must still speak rather than silently drop the reply. The simplest stage-2 fallback may publish one full `say` clip, accepting hard-cut behavior for that exceptional path. Chunking the `say` fallback is optional until Kokoro chunking is stable.
+The initial boundary is one Kokoro/misaki generator yield. Any later grouping or
+splitting must be implemented and tested in the streaming-synthesis layer while
+preserving the same external queue contract.
 
 ## Writer changes
 
-Today `writer.sh` selects one ready `.wav`/`.aiff` and runs one decoder to EOF. Stage 2 changes the unit of work from “utterance file” to “utterance manifest plus ordered chunk files.”
+After streaming synthesis is implemented, `raven write` already consumes one
+active reply as ordered part files. Stage 2 adds an interrupt-policy check at the
+safe point between two parts.
 
 For each utterance:
 
-1. Add the transcript entry when the first chunk begins, as today.
+1. Add the transcript entry when the first part begins, as defined by the
+   streaming-synthesis protocol.
 2. Decode the current chunk into the existing PCM output.
-3. When that decoder exits, emit the normal cached idle bridge.
+3. When that decoder exits, emit the normal comfort-noise bridge.
 4. Re-read `queue/.latest` before opening the next chunk.
 5. If a newer ID is selected, mark the old transcript `preempted` and move to the newest ready utterance.
 6. Otherwise, decode the next chunk.
-7. After the final chunk, mark the transcript `completed`.
+7. After the final declared part, mark the transcript `completed`.
 
 The inter-chunk check is for automatic latest-wins. In parallel, the writer continues polling `.interrupt` during chunk playback exactly as designed for hard interruption. A `skip:` token kills the current chunk decoder immediately; a `new:` token is deferred to the next boundary under this stage-2 policy.
 
@@ -103,7 +114,11 @@ The latest reply still wins. Stage 2 only defines *where* the automatic handoff 
 
 ## Tradeoff
 
-Boundary-aware preemption is less fresh by at most the remaining duration of the active chunk, normally several seconds. HLS buffering then adds the existing playback delay before the driver hears the switch. In exchange, most automatic transitions end after a complete thought, Kokoro prosody remains intact, and long answers are still bounded rather than allowed to finish.
+Boundary-aware preemption is less fresh by at most the remaining duration of the
+active part. HLS buffering then adds the existing playback delay before the
+driver hears the switch. In exchange, most automatic transitions end after a
+complete thought, Kokoro prosody remains intact, and long answers are still
+bounded rather than allowed to finish.
 
 Chunk length is the tuning lever:
 
@@ -111,15 +126,22 @@ Chunk length is the tuning lever:
 - longer chunks sound more continuous but make a newer answer wait longer; and
 - sentence-only grouping is more natural but produces variable timing.
 
-Start with sentence-preserving 8–15-second groups. Tune from device listening, not waveform aesthetics.
+Start with the existing Kokoro/misaki yielded parts. Tune from device listening,
+not waveform aesthetics, and add duration grouping only if the measured
+boundaries require it.
 
 ## Rollout and verification
 
 1. Implement and soak-test hard latest-wins first, including 20–50 mid-clip interruptions with the phone locked and on the car audio route.
-2. Add chunked synthesis behind a separate experimental switch; verify manifests are atomic and superseded partial chunks are cleaned.
-3. Play a fixed story containing abbreviations, decimals, short sentences, and very long sentences. Confirm the segmenter never drops or duplicates text.
+2. Implement and prove streaming synthesis, including atomic part publication,
+   terminal completeness, restart behavior, and whole-audio parity.
+3. Play a fixed story containing abbreviations, decimals, short sentences, and
+   very long sentences. Confirm yielded boundaries never drop or duplicate
+   audio and are acceptable preemption points.
 4. Enable boundary checks for automatic `new:` events while leaving `skip:` immediate.
-5. Compare 5–8, 8–15, and 15–20-second targets on a real drive. Measure arrival-to-cut time and record whether the transition sounded intentional.
+5. Measure actual yielded-part durations on a real drive. If grouping is needed,
+   compare candidate windows and record arrival-to-cut time and whether the
+   transition sounded intentional.
 6. Verify `.ffmpeg.pid` remains identical through repeated boundary cuts, HLS media sequence remains monotonic, and the phone records uninterrupted playback progress.
 7. Confirm transcript outcomes: begun old replies become `preempted`, manual cuts become `skipped`, completed replies remain `completed`, and never-started superseded replies do not appear.
 
@@ -132,3 +154,10 @@ Start with sentence-preserving 8–15-second groups. Tune from device listening,
 - Boundary cuts improve the Mac-side transition. They do not remove the iPhone's existing HLS buffer, so the audible switch remains delayed.
 - Manual Skip is intentionally jarring when necessary. Its contract is immediacy, not prosodic grace.
 
+## Composition with live narration
+
+[`SCOPE_LIVE_NARRATION.md`](SCOPE_LIVE_NARRATION.md) can enqueue multiple
+completed assistant blocks during one Claude turn. Each block is an ordinary
+reply job using the shared streaming-part protocol. If a newer block arrives
+while an older block is speaking, this policy may hand off at the next part
+boundary. Live narration does not add a second cut mechanism.

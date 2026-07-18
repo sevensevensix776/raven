@@ -17,10 +17,10 @@ The product and iPhone display name are **Raven**. A few implementation names st
 ## End-to-end flow
 
 1. The user submits a prompt in Claude Code, including through Remote Control.
-2. Claude Code invokes `~/.claude/hooks/speak-reply.sh` for `UserPromptSubmit`. The hook updates the channel registry and, in follow mode, makes that session active.
-3. When Claude finishes, the same hook runs for `Stop`. It cleans the reply for speech and atomically commits `queue/<stamp>.caption.json` followed by `queue/<stamp>.txt`—but only if that session is selected.
+2. Claude Code invokes `~/.local/bin/raven hook` for `UserPromptSubmit`. The hook updates the channel registry and, in follow mode, makes that session active.
+3. When Claude finishes, `raven hook` runs for `Stop`. It cleans the reply for speech and atomically commits `queue/<stamp>.caption.json` followed by `queue/<stamp>.txt`—but only if that session is selected.
 4. `synthd.py` notices the oldest text job. Its already-warm Kokoro-82M model renders the reply with `af_heart` into an atomic `.wav`; macOS `say` is the fallback.
-5. `writer.sh` takes ready `.wav` or `.aiff` files oldest-first. If `synthd` is unavailable and a `.txt` has waited at least five seconds, the writer synthesizes it inline with `say` instead.
+5. `raven write` takes ready `.wav` or `.aiff` files oldest-first. If `synthd` is unavailable and a `.txt` has waited at least five seconds, the writer synthesizes it inline with `say` instead.
 6. The writer converts each clip to 24 kHz mono signed 16-bit PCM. Between replies it continuously emits a very low pink-noise floor. Its stdout remains attached to `pcm.fifo` for the life of the process.
 7. One persistent `ffmpeg -re` process reads the FIFO in real time and produces a live AAC HLS stream: two-second MPEG-TS segments, a five-segment sliding playlist, and no end marker.
 8. The Raven iPhone app plays `http://100.64.0.1:8080/stream.m3u8` with `AVPlayer`, seeks near the live edge, owns the non-mixable playback audio session, and exposes Now Playing and CarPlay controls.
@@ -31,14 +31,14 @@ The transcript is committed when the writer begins emitting a reply—not when C
 
 | Component | Responsibility |
 |---|---|
-| `~/.claude/hooks/speak-reply.sh` | Tracks sessions and queues the selected session's completed replies. The repository copy is `hooks/speak-reply.sh`; the installed hook is the one under `~/.claude/hooks/`. |
+| `raven hook` | Tracks sessions and queues the selected session's completed replies. The retained Bash hook at `~/.claude/hooks/speak-reply.sh` is the rollback path. |
 | `synthd.py` | Keeps Kokoro-82M warm, synthesizes queued text, optionally summarizes, and falls back to `say` on synthesis errors. |
-| `writer.sh` | Emits an endless PCM timeline, chooses ready audio oldest-first, supplies the idle floor and speech pre-roll, and records transcript/emission events. |
+| `raven write` | Emits an endless PCM timeline, chooses ready audio oldest-first, supplies the idle floor and speech pre-roll, and records transcript/emission events. `writer.sh` is retained for parity/rollback. |
 | persistent `ffmpeg -re` | Converts the FIFO's real-time PCM into the single live HLS timeline. |
-| `server.py` | Serves HLS and the tailnet control, transcript, health, and phone-log API on `100.64.0.1:8080`. |
+| `raven serve` | Serves HLS and the tailnet control, transcript, health, and phone-log API on `100.64.0.1:8080`. |
 | Raven for iPhone | Plays the live stream, selects a channel, displays the spoken transcript, mutes locally, and uploads playback evidence. |
 | `ravenlog.py` | Appends structured Mac-side events to `logs/events.jsonl`. |
-| `diagnose.py` | Combines PID, heartbeat, queue, synthesis, selection, and uploaded-phone-log evidence into one verdict. |
+| `raven diagnose` | Combines PID, heartbeat, queue, synthesis, selection, and uploaded-phone-log evidence into one verdict. |
 | `start.sh`, `stop.sh`, `spawn.py` | Start and stop four detached process groups without tying their lifetime to the launching shell. |
 
 ## Load-bearing invariants
@@ -57,7 +57,7 @@ There is one long-lived encoder, one FIFO, and one monotonically advancing HLS s
 
 ### Queue commits are atomic
 
-Producers write temporary files and rename them into place. For hook jobs, caption metadata is committed first and `.txt` last; the text rename is the ready marker. `synthd` similarly publishes `.wav` only after the complete file exists. The writer must never see a half-written job or clip.
+Producers write temporary files and rename them into place. For hook jobs, caption metadata is committed first and `.txt` last; the text rename is the ready marker. `synthd` similarly publishes `.wav` only after the complete file exists. `raven write` must never see a half-written job or clip.
 
 ### Channel state has one lock
 
@@ -73,10 +73,10 @@ The `UserPromptSubmit` and `Stop` hooks belong to the Claude Code session runtim
 
 ```bash
 ~/speech/start.sh
-python3 ~/speech/diagnose.py
+raven diagnose
 ```
 
-`start.sh` first stops any recorded prior processes, recreates the HLS output, and launches the writer, encoder, server, and synthesis daemon in detached sessions. Their combined stdout and stderr go to `~/speech/.detached.log`.
+`start.sh` first stops any recorded prior processes, recreates the HLS output, and launches `raven write`, the encoder, `raven serve`, and the Python synthesis daemon in detached sessions. Their combined stdout and stderr go to `~/speech/.detached.log`.
 
 ```bash
 ~/speech/stop.sh
@@ -116,15 +116,15 @@ This queues a macOS `say` clip directly. It is useful for proving FIFO → HLS �
 ### Diagnose a problem
 
 ```bash
-python3 ~/speech/diagnose.py
-python3 ~/speech/diagnose.py --since-min 15
+raven diagnose
+raven diagnose --since-min 15
 curl -fsS http://100.64.0.1:8080/health | python3 -m json.tool
 tail -100 ~/speech/logs/events.jsonl
 tail -100 ~/speech/logs/phone.jsonl
 tail -100 ~/speech/.detached.log
 ```
 
-`diagnose.py` verifies all four process PIDs, listener heartbeat age, queue depth, channel selection, recent synthesis backends and latency, gate skips, fallback errors, and uploaded phone evidence. `EarPlayback.log` progress is strong evidence that media time advanced in `AVPlayer`; it is not proof that sound reached the car speakers.
+`raven diagnose` verifies all four process PIDs, listener heartbeat age, queue depth, channel selection, recent synthesis backends and latency, gate skips, fallback errors, and uploaded phone evidence. `EarPlayback.log` progress is strong evidence that media time advanced in `AVPlayer`; it is not proof that sound reached the car speakers.
 
 ## Configuration
 
@@ -145,7 +145,7 @@ The hook removes fenced code blocks, inline code, Markdown punctuation, and long
 
 ## Tailnet API
 
-The server binds plain HTTP to `100.64.0.1:8080` by default. `HUGINN_BIND` can override the bind address when launching `server.py`; it is an environment variable, not a `config.sh` setting.
+The server binds plain HTTP to `100.64.0.1:8080` by default. `RAVEN_BIND` can override the bind address for `raven serve`; it is an environment variable, not a `config.sh` setting.
 
 | Method and path | Request | Response and behavior |
 |---|---|---|
@@ -181,4 +181,4 @@ The API has no application-level authentication. Its boundary is the Tailscale a
 - **No listener means no delivery.** The queue is held when the playlist heartbeat is stale, then resumes when a listener returns. Jobs that become more than ten minutes old are dropped instead of reading stale replies on reconnect.
 - **Character caps are blunt.** Any positive `MAX_SPOKEN_CHARS` value cuts bytes, not sentences. Keep it at `0` unless a hard cap is more important than a clean ending.
 - **Raven is tailnet-specific.** The Mac bind address and iPhone URLs are currently compiled/configured for `100.64.0.1`; there is no discovery or settings screen.
-- **The hook is now Go, not bash.** As of 2026-07-18 the live hook is `raven hook` (`~/.local/bin/raven`, from [`experiments/raven-go`](../raven-go/)), wired into `~/.claude/settings.json` for UserPromptSubmit/Stop/SessionEnd. The bash `speak-reply.sh` is kept as rollback. The server and writer are being ported to Go next (parity-tested); `synthd` stays Python for Kokoro. See the raven-go README for the migration status.
+- **The Mac orchestration migration is complete.** All four subcommands—`raven hook`, `raven serve`, `raven write`, and `raven diagnose`—are implemented in Go and the live pipeline uses the Go hook, server, and writer. `synthd.py` intentionally stays Python at the Kokoro/`mlx-audio` boundary. The Bash/Python predecessors remain as parity fixtures and rollback paths. Build/install the Go binary with [`install.sh`](../code/experiments/raven-go/install.sh), not `cp` over the live executable: in-place replacement can make new macOS execs die with SIGKILL while long-lived Raven processes still map the old binary. See the [raven-go README](../code/experiments/raven-go/README.md).
