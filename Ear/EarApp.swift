@@ -29,6 +29,7 @@ struct RootView: View {
     @StateObject private var playback = PlaybackController()
     @StateObject private var api = HuginnAPI()
     @State private var showingChannels = false
+    @State private var nearBottom = true
 
     var body: some View {
         ZStack {
@@ -137,13 +138,56 @@ struct RootView: View {
             .background(Palette.panel)
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .padding(.horizontal, 12)
+            // Track how far the last row is from the viewport bottom, so we only
+            // auto-scroll when the user is already near the bottom (never yank
+            // them while they're reading history) and can show a jump button.
+            .onScrollGeometryChange(for: CGFloat.self) { geo in
+                geo.contentSize.height - geo.contentOffset.y - geo.containerSize.height
+            } action: { _, distanceFromBottom in
+                nearBottom = distanceFromBottom < 120
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if !nearBottom && !lines.isEmpty {
+                    Button {
+                        scrollToBottom(proxy, lines)
+                    } label: {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(Palette.bgBottom)
+                            .frame(width: 44, height: 44)
+                            .background(Palette.gold)
+                            .clipShape(Circle())
+                            .shadow(color: .black.opacity(0.4), radius: 6, y: 2)
+                    }
+                    .padding(.trailing, 26)
+                    .padding(.bottom, 16)
+                    .transition(.scale.combined(with: .opacity))
+                    .accessibilityLabel("Scroll to latest")
+                }
+            }
             .onChange(of: lines.last?.id) { _, id in
-                guard let id else { return }
+                guard let id, nearBottom else { return } // don't interrupt reading
                 withAnimation(.easeOut(duration: 0.2)) {
                     proxy.scrollTo(id, anchor: .bottom)
                 }
             }
+            .onChange(of: showingChannels) { _, showing in
+                // Jump to latest whenever the sheet closes (i.e. on connect/open).
+                if !showing { scrollToBottom(proxy, lines) }
+            }
+            .task(id: api.selectedSessionID) {
+                // On opening / switching a session, land at the newest line.
+                scrollToBottom(proxy, lines)
+            }
         }
+    }
+
+    private func scrollToBottom(_ proxy: ScrollViewProxy, _ lines: [SpokenLine]) {
+        guard let last = lines.last?.id else { return }
+        withAnimation(.easeOut(duration: 0.25)) {
+            proxy.scrollTo(last, anchor: .bottom)
+        }
+        nearBottom = true
     }
 
     private var displayedTranscript: [SpokenLine] {
@@ -254,15 +298,166 @@ private struct TranscriptRow: View {
                         .font(.caption2)
                         .foregroundStyle(.white.opacity(0.35))
                 }
-                Text(line.text)
-                    .font(.title3.weight(.regular))
+                TranscriptMarkdown(source: line.display ?? line.text)
                     .foregroundStyle(.white.opacity(0.94))
-                    .lineSpacing(5)
                     .textSelection(.enabled)
             }
             .padding(.trailing, 44)
             .padding(.bottom, 2)
         }
+    }
+}
+
+private struct TranscriptMarkdown: View {
+    let source: String
+
+    private var blocks: [TranscriptMarkdownBlock] {
+        TranscriptMarkdownBlock.parse(source)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                switch block {
+                case .paragraph(let text):
+                    Text(inlineMarkdown(text))
+                        .font(.title3.weight(.regular))
+                        .lineSpacing(5)
+
+                case .heading(let level, let text):
+                    Text(inlineMarkdown(text))
+                        .font(headingFont(level).weight(.bold))
+                        .lineSpacing(4)
+
+                case .list(let items):
+                    VStack(alignment: .leading, spacing: 7) {
+                        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                            HStack(alignment: .firstTextBaseline, spacing: 9) {
+                                Text(item.marker)
+                                    .font(.title3.monospacedDigit().weight(.semibold))
+                                    .foregroundStyle(Palette.gold.opacity(0.9))
+                                    .frame(minWidth: 22, alignment: .trailing)
+                                Text(inlineMarkdown(item.text))
+                                    .font(.title3.weight(.regular))
+                                    .lineSpacing(5)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+
+                case .code:
+                    Text("[code]")
+                        .font(.subheadline.monospaced().weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.58))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7)
+                                .strokeBorder(.white.opacity(0.12), lineWidth: 0.5)
+                        )
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func inlineMarkdown(_ text: String) -> AttributedString {
+        var options = AttributedString.MarkdownParsingOptions()
+        options.interpretedSyntax = .inlineOnlyPreservingWhitespace
+        return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
+    }
+
+    private func headingFont(_ level: Int) -> Font {
+        switch level {
+        case 1: .title2
+        case 2: .title3
+        default: .headline
+        }
+    }
+}
+
+private struct TranscriptMarkdownListItem {
+    let marker: String
+    let text: String
+
+    static func parse(_ rawLine: String) -> Self? {
+        let line = rawLine.drop(while: { $0.isWhitespace })
+        if line.hasPrefix("- ") || line.hasPrefix("* ") {
+            return Self(marker: "•", text: String(line.dropFirst(2)))
+        }
+
+        let digits = line.prefix(while: { $0.isNumber })
+        guard !digits.isEmpty else { return nil }
+        let remainder = line.dropFirst(digits.count)
+        guard remainder.hasPrefix(". ") else { return nil }
+        return Self(marker: "\(digits).", text: String(remainder.dropFirst(2)))
+    }
+}
+
+private enum TranscriptMarkdownBlock {
+    case paragraph(String)
+    case heading(Int, String)
+    case list([TranscriptMarkdownListItem])
+    case code
+
+    static func parse(_ source: String) -> [Self] {
+        let lines = source.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        var blocks: [Self] = []
+        var paragraphLines: [String] = []
+        var listItems: [TranscriptMarkdownListItem] = []
+
+        func flushParagraph() {
+            guard !paragraphLines.isEmpty else { return }
+            blocks.append(.paragraph(paragraphLines.joined(separator: "\n")))
+            paragraphLines.removeAll(keepingCapacity: true)
+        }
+
+        func flushList() {
+            guard !listItems.isEmpty else { return }
+            blocks.append(.list(listItems))
+            listItems.removeAll(keepingCapacity: true)
+        }
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty {
+                flushParagraph()
+                flushList()
+                continue
+            }
+            if trimmed == "[code]" {
+                flushParagraph()
+                flushList()
+                blocks.append(.code)
+                continue
+            }
+            if let item = TranscriptMarkdownListItem.parse(line) {
+                flushParagraph()
+                listItems.append(item)
+                continue
+            }
+
+            flushList()
+            if let heading = heading(from: trimmed) {
+                flushParagraph()
+                blocks.append(.heading(heading.level, heading.text))
+            } else {
+                paragraphLines.append(line)
+            }
+        }
+
+        flushParagraph()
+        flushList()
+        return blocks
+    }
+
+    private static func heading(from line: String) -> (level: Int, text: String)? {
+        let level = line.prefix(while: { $0 == "#" }).count
+        guard (1...6).contains(level) else { return nil }
+        let remainder = line.dropFirst(level)
+        guard remainder.hasPrefix(" ") else { return nil }
+        return (level, String(remainder.dropFirst()))
     }
 }
 

@@ -29,6 +29,7 @@ struct SpokenLine: Codable, Identifiable, Equatable {
     let sessionID: String
     let project: String
     let text: String
+    let display: String?
     let spokenAtEpoch: TimeInterval
     private let roleRaw: String?
     private let catchupRaw: Bool?
@@ -42,6 +43,7 @@ struct SpokenLine: Codable, Identifiable, Equatable {
         case sessionID = "session_id"
         case project
         case text
+        case display
         case spokenAtEpoch = "spoken_at_epoch"
         case roleRaw = "role"
         case catchupRaw = "catchup"
