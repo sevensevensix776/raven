@@ -22,3 +22,4 @@ These records capture the architectural choices behind Raven. They describe why 
 - **Accepted** means the decision governs the system.
 - **Accepted; implementation deferred** means the policy is chosen and its design is documented, but current production behavior has not yet changed.
 - A future record should supersede, rather than silently rewrite, a decision whose underlying constraints change.
+- [0013 — Target only the current phone's iOS (iOS 26)](0013-target-current-ios-only.md)
