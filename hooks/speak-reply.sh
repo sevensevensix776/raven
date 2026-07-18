@@ -107,7 +107,23 @@ with (speech / ".state.lock").open("a+") as lock:
 PY
 
 case "$event" in
-  UserPromptSubmit) exit 0 ;;
+  UserPromptSubmit)
+    # Record the user's prompt in the transcript (screen only, NOT spoken) when
+    # this session is the selected channel — turns the transcript into a
+    # two-sided conversation. The registry block above already made this session
+    # active in follow mode, so the selection check reflects that.
+    sel=$(python3 - "$SELECTION" <<'PY' 2>/dev/null
+import json, pathlib, sys
+try:
+    print(json.loads(pathlib.Path(sys.argv[1]).read_text()).get("session_id") or "")
+except Exception:
+    pass
+PY
+)
+    if [ -f "$SPEECH/speak-all" ] || [ "$session" = "$sel" ]; then
+      printf '%s' "$raw_text" | python3 "$SPEECH/transcript_user.py" "$session" "$(basename "$cwd")" 2>/dev/null
+    fi
+    exit 0 ;;
   Stop) ;;
   *) exit 0 ;;
 esac

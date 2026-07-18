@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Record an utterance when writer.sh starts emitting it."""
+"""Record Claude's utterance when writer.sh starts emitting it (role=claude)."""
 
+import fcntl
 import json
 import os
 import pathlib
@@ -8,33 +9,42 @@ import sys
 import tempfile
 import time
 
-speech = pathlib.Path.home() / "speech"
-spoken = speech / "spoken.jsonl"
-metadata_path = pathlib.Path(sys.argv[1])
+SPEECH = pathlib.Path.home() / "speech"
+SPOKEN = SPEECH / "spoken.jsonl"
+LOCK = SPEECH / ".transcript.lock"
 
-try:
-    entry = json.loads(metadata_path.read_text())
-except (OSError, json.JSONDecodeError):
-    raise SystemExit(0)
 
-entry["id"] = entry.get("id") or metadata_path.name.split(".", 1)[0]
-entry["spoken_at_epoch"] = time.time()
+def append(entry):
+    """Flocked, atomic append to spoken.jsonl — the hook (user lines) and the
+    writer (claude lines) both call this and must not clobber each other."""
+    with LOCK.open("a+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            existing = SPOKEN.read_text(encoding="utf-8").splitlines()[-199:]
+        except OSError:
+            existing = []
+        existing.append(json.dumps(entry, separators=(",", ":"), ensure_ascii=False))
+        fd, tmp = tempfile.mkstemp(prefix=".spoken.", dir=SPEECH)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as h:
+                h.write("\n".join(existing) + "\n")
+                h.flush()
+                os.fsync(h.fileno())
+            os.replace(tmp, SPOKEN)
+        finally:
+            try:
+                os.unlink(tmp)
+            except FileNotFoundError:
+                pass
 
-try:
-    existing = spoken.read_text().splitlines()[-199:]
-except OSError:
-    existing = []
-existing.append(json.dumps(entry, separators=(",", ":")))
 
-fd, temporary = tempfile.mkstemp(prefix=".spoken.", dir=speech)
-try:
-    with os.fdopen(fd, "w") as handle:
-        handle.write("\n".join(existing) + "\n")
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.replace(temporary, spoken)
-finally:
+if __name__ == "__main__":
+    metadata_path = pathlib.Path(sys.argv[1])
     try:
-        os.unlink(temporary)
-    except FileNotFoundError:
-        pass
+        entry = json.loads(metadata_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        raise SystemExit(0)
+    entry["id"] = entry.get("id") or metadata_path.name.split(".", 1)[0]
+    entry["spoken_at_epoch"] = time.time()
+    entry.setdefault("role", "claude")
+    append(entry)
