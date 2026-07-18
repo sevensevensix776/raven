@@ -37,19 +37,15 @@ type Selection struct {
 // of operations (SessionEnd unsticks selection before `pinned` is computed; the
 // UserPromptSubmit follow-write happens last).
 func UpdateRegistry(home, event, session, cwd, lastLine string, ttlHours float64) {
-	lock, err := os.OpenFile(filepath.Join(home, ".state.lock"), os.O_CREATE|os.O_RDWR, 0o644)
+	unlock, err := Lock(home)
 	if err != nil {
 		return
 	}
-	defer lock.Close()
-	if syscall.Flock(int(lock.Fd()), syscall.LOCK_EX) != nil {
-		return
-	}
-	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+	defer unlock()
 
 	now := float64(time.Now().UnixNano()) / 1e9
-	sel := readSelection(home)
-	existing := readChannels(home)
+	sel := ReadSelection(home)
+	existing := ReadChannels(home)
 
 	// Carry the session's rolling reply history across the row rebuild.
 	recent := []Recent{}
@@ -73,7 +69,7 @@ func UpdateRegistry(home, event, session, cwd, lastLine string, ttlHours float64
 			sel.Mode = "follow"
 			sel.SessionID = sel.FollowSessionID
 		}
-		writeJSON(filepath.Join(home, "selection.json"), sel)
+		_ = WriteJSON(filepath.Join(home, "selection.json"), sel)
 	} else {
 		if event == "Stop" && strings.TrimSpace(lastLine) != "" {
 			recent = append(recent, Recent{Text: lastLine, At: now})
@@ -112,7 +108,7 @@ func UpdateRegistry(home, event, session, cwd, lastLine string, ttlHours float64
 	if len(kept) > 50 {
 		kept = kept[:50]
 	}
-	writeJSON(filepath.Join(home, "channels.json"), kept)
+	_ = WriteJSON(filepath.Join(home, "channels.json"), kept)
 
 	if event == "UserPromptSubmit" {
 		s := session
@@ -120,56 +116,91 @@ func UpdateRegistry(home, event, session, cwd, lastLine string, ttlHours float64
 		if sel.Mode == "" || sel.Mode == "follow" {
 			sel.SessionID = &s
 		}
-		writeJSON(filepath.Join(home, "selection.json"), sel)
+		_ = WriteJSON(filepath.Join(home, "selection.json"), sel)
 	}
 }
 
 // SelectedSession returns selection.json's active session_id ("" if none) —
 // used by the speech gate and the user-transcript gate.
 func SelectedSession(home string) string {
-	sel := readSelection(home)
+	sel := ReadSelection(home)
 	if sel.SessionID == nil {
 		return ""
 	}
 	return *sel.SessionID
 }
 
-func readSelection(home string) Selection {
+// ReadSelection reads selection.json, returning follow mode with nil session
+// fields when the file is absent or malformed.
+func ReadSelection(home string) Selection {
 	sel := Selection{Mode: "follow"}
 	b, err := os.ReadFile(filepath.Join(home, "selection.json"))
 	if err == nil {
-		_ = json.Unmarshal(b, &sel)
+		if json.Unmarshal(b, &sel) != nil {
+			return Selection{Mode: "follow"}
+		}
 	}
 	return sel
 }
 
-func readChannels(home string) []Channel {
-	var cs []Channel
+// ReadChannels reads channels.json, returning an empty (non-nil) slice when
+// the file is absent or malformed so callers serialize [] rather than null.
+func ReadChannels(home string) []Channel {
+	cs := []Channel{}
 	b, err := os.ReadFile(filepath.Join(home, "channels.json"))
 	if err == nil {
-		_ = json.Unmarshal(b, &cs)
+		if json.Unmarshal(b, &cs) != nil {
+			return []Channel{}
+		}
 	}
 	return cs
 }
 
-func writeJSON(path string, v any) {
+// Lock takes Raven's cross-process state flock and returns an unlock function.
+// The caller must invoke unlock when it has finished all related reads/writes.
+func Lock(home string) (unlock func(), err error) {
+	lock, err := os.OpenFile(filepath.Join(home, ".state.lock"), os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		_ = lock.Close()
+		return nil, err
+	}
+	return func() {
+		_ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+		_ = lock.Close()
+	}, nil
+}
+
+// WriteJSON atomically writes compact JSON and fsyncs it before rename.
+func WriteJSON(path string, v any) error {
 	b, err := json.Marshal(v)
 	if err != nil {
-		return
+		return err
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
 	if err != nil {
-		return
+		return err
 	}
 	tmpName := tmp.Name()
 	if _, err := tmp.Write(b); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
-		return
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return err
 	}
-	tmp.Sync()
-	tmp.Close()
-	if os.Rename(tmpName, path) != nil {
-		os.Remove(tmpName)
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return err
 	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	return nil
 }
