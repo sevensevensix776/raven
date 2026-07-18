@@ -268,7 +268,17 @@ private struct ChannelPicker: View {
             }
             .navigationTitle("Channels")
             .navigationBarTitleDisplayMode(.inline)
+            .task { await api.refreshChannels() }   // fetch fresh the instant the sheet opens
             .refreshable { await api.refreshChannels() }
+            .overlay {
+                if api.channels.isEmpty {
+                    ContentUnavailableView(
+                        "No active sessions",
+                        systemImage: "bubble.left.and.bubble.right",
+                        description: Text("Talk to a Claude Code session and it will appear here.")
+                    )
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
