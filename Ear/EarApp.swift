@@ -346,7 +346,7 @@ private struct ChannelPicker: View {
                             }
                         } label: {
                             ChannelLabel(
-                                title: channel.project.isEmpty ? "Unknown project" : channel.project,
+                                title: channel.displayName,
                                 subtitle: channel.lastLine.isEmpty ? "No recent text" : channel.lastLine,
                                 detail: Date(timeIntervalSince1970: channel.lastActiveEpoch),
                                 selected: api.selectionMode == "pinned" && api.selectedSessionID == channel.sessionID

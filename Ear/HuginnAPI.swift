@@ -3,14 +3,22 @@ import Foundation
 struct HuginnChannel: Codable, Identifiable, Equatable {
     let sessionID: String
     let project: String
+    let name: String?
     let lastActiveEpoch: TimeInterval
     let lastLine: String
 
     var id: String { sessionID }
 
+    // Prefer the Remote Control session name; fall back to the project folder.
+    var displayName: String {
+        if let name, !name.isEmpty { return name }
+        return project.isEmpty ? "Session" : project
+    }
+
     enum CodingKeys: String, CodingKey {
         case sessionID = "session_id"
         case project
+        case name
         case lastActiveEpoch = "last_active_epoch"
         case lastLine = "last_line"
     }
@@ -87,11 +95,11 @@ final class HuginnAPI: ObservableObject {
     }
 
     var channelLabel: String {
-        let project = currentChannel?.project
+        let name = currentChannel?.displayName
         if selectionMode == "follow" {
-            return project.map { "Following · \($0)" } ?? "Following active session"
+            return name.map { "Following · \($0)" } ?? "Following active session"
         }
-        return project ?? "Pinned session"
+        return name ?? "Pinned session"
     }
 
     func refreshChannels() async {
