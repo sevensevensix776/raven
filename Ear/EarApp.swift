@@ -14,6 +14,16 @@ private enum Palette {
     static let panel = Color.white.opacity(0.055)
 }
 
+private struct TranscriptLineKey: Hashable {
+    let sessionID: String
+    let text: String
+
+    init(_ line: SpokenLine) {
+        sessionID = line.sessionID
+        text = line.text
+    }
+}
+
 struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var playback = PlaybackController()
@@ -92,10 +102,12 @@ struct RootView: View {
     }
 
     private var transcript: some View {
-        ScrollViewReader { proxy in
+        let lines = displayedTranscript
+
+        return ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18) {
-                    if api.transcript.isEmpty {
+                    if lines.isEmpty {
                         ContentUnavailableView(
                             "Nothing spoken yet",
                             systemImage: "text.bubble",
@@ -105,9 +117,17 @@ struct RootView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.top, 80)
                     } else {
-                        ForEach(api.transcript) { line in
-                            TranscriptRow(line: line)
-                                .id(line.id)
+                        ForEach(Array(lines.enumerated()), id: \.element.id) { index, line in
+                            VStack(alignment: .leading, spacing: 10) {
+                                if index == 0 || lines[index - 1].sessionID != line.sessionID {
+                                    SessionDivider(project: line.project)
+                                }
+
+                                TranscriptRow(line: line)
+                                    .opacity(line.isCatchup ? 0.72 : 1)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .id(line.id)
                         }
                     }
                 }
@@ -117,12 +137,28 @@ struct RootView: View {
             .background(Palette.panel)
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .padding(.horizontal, 12)
-            .onChange(of: api.transcript.last?.id) { _, id in
+            .onChange(of: lines.last?.id) { _, id in
                 guard let id else { return }
                 withAnimation(.easeOut(duration: 0.2)) {
                     proxy.scrollTo(id, anchor: .bottom)
                 }
             }
+        }
+    }
+
+    private var displayedTranscript: [SpokenLine] {
+        let transcriptKeys = Set(api.transcript.map(TranscriptLineKey.init))
+        var catchupKeys: Set<TranscriptLineKey> = []
+        let uniqueCatchup = api.catchup.filter { line in
+            let key = TranscriptLineKey(line)
+            return !transcriptKeys.contains(key) && catchupKeys.insert(key).inserted
+        }
+
+        return (uniqueCatchup + api.transcript).sorted { lhs, rhs in
+            if lhs.spokenAtEpoch == rhs.spokenAtEpoch {
+                return lhs.id < rhs.id
+            }
+            return lhs.spokenAtEpoch < rhs.spokenAtEpoch
         }
     }
 
@@ -227,6 +263,34 @@ private struct TranscriptRow: View {
             .padding(.trailing, 44)
             .padding(.bottom, 2)
         }
+    }
+}
+
+private struct SessionDivider: View {
+    let project: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Rectangle()
+                .fill(.white.opacity(0.18))
+                .frame(height: 0.5)
+
+            Text(project.isEmpty ? "Claude" : project)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.78))
+                .lineLimit(1)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Palette.gold.opacity(0.12), in: Capsule())
+                .overlay(Capsule().strokeBorder(Palette.gold.opacity(0.24), lineWidth: 0.5))
+
+            Rectangle()
+                .fill(.white.opacity(0.18))
+                .frame(height: 0.5)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Session: \(project.isEmpty ? "Claude" : project)")
     }
 }
 

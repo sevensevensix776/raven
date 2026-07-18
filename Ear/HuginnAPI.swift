@@ -23,9 +23,11 @@ struct SpokenLine: Codable, Identifiable, Equatable {
     let text: String
     let spokenAtEpoch: TimeInterval
     private let roleRaw: String?
+    private let catchupRaw: Bool?
 
     // Older transcript entries predate the role field — treat them as Claude.
     var isUser: Bool { roleRaw == "user" }
+    var isCatchup: Bool { catchupRaw ?? false }
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -34,6 +36,7 @@ struct SpokenLine: Codable, Identifiable, Equatable {
         case text
         case spokenAtEpoch = "spoken_at_epoch"
         case roleRaw = "role"
+        case catchupRaw = "catchup"
     }
 }
 
@@ -60,6 +63,7 @@ private struct TranscriptResponse: Codable {
 final class HuginnAPI: ObservableObject {
     @Published private(set) var channels: [HuginnChannel] = []
     @Published private(set) var transcript: [SpokenLine] = []
+    @Published private(set) var catchup: [SpokenLine] = []
     @Published private(set) var selectionMode = "follow"
     @Published private(set) var selectedSessionID: String?
     @Published private(set) var errorText: String?
@@ -67,6 +71,8 @@ final class HuginnAPI: ObservableObject {
     private let baseURL = URL(string: "http://100.64.0.1:8080")!
     private let session: URLSession
     private var etags: [String: String] = [:]
+    private var lastLoadedCatchupSessionID: String?
+    private var catchupCache: [String: [SpokenLine]] = [:]
 
     init() {
         let configuration = URLSessionConfiguration.ephemeral
@@ -92,10 +98,14 @@ final class HuginnAPI: ObservableObject {
         do {
             guard let data = try await get(path: "/channels") else { return }
             let response = try JSONDecoder().decode(ChannelsResponse.self, from: data)
+            let previousSessionID = selectedSessionID
             channels = response.channels
             selectionMode = response.selection.mode
             selectedSessionID = response.selection.sessionID
             errorText = nil
+            if selectedSessionID != previousSessionID {
+                await loadCatchup(session: selectedSessionID)
+            }
         } catch {
             errorText = "Channels unavailable"
         }
@@ -108,6 +118,40 @@ final class HuginnAPI: ObservableObject {
             errorText = nil
         } catch {
             errorText = "Transcript unavailable"
+        }
+    }
+
+    func loadCatchup(session sessionID: String?) async {
+        guard let sessionID, !sessionID.isEmpty else {
+            catchup = []
+            lastLoadedCatchupSessionID = nil
+            return
+        }
+        guard sessionID != lastLoadedCatchupSessionID else { return }
+
+        catchup = []
+        lastLoadedCatchupSessionID = nil
+
+        var components = URLComponents()
+        components.queryItems = [URLQueryItem(name: "session", value: sessionID)]
+        let path = "/catchup?\(components.percentEncodedQuery ?? "")"
+
+        do {
+            let lines: [SpokenLine]
+            if let data = try await get(path: path) {
+                lines = try JSONDecoder().decode(TranscriptResponse.self, from: data).lines
+                catchupCache[sessionID] = lines
+            } else {
+                lines = catchupCache[sessionID] ?? []
+            }
+
+            guard selectedSessionID == sessionID else { return }
+            catchup = lines
+            lastLoadedCatchupSessionID = sessionID
+            errorText = nil
+        } catch {
+            guard selectedSessionID == sessionID else { return }
+            errorText = "Catch-up unavailable"
         }
     }
 
@@ -132,10 +176,14 @@ final class HuginnAPI: ObservableObject {
                 throw URLError(.badServerResponse)
             }
             let selection = try JSONDecoder().decode(Selection.self, from: data)
+            let previousSessionID = selectedSessionID
             selectionMode = selection.mode
             selectedSessionID = selection.sessionID
             etags.removeValue(forKey: "/channels")
             errorText = nil
+            if selectedSessionID != previousSessionID {
+                await loadCatchup(session: selectedSessionID)
+            }
             await refreshChannels()
         } catch {
             errorText = "Could not change channel"
