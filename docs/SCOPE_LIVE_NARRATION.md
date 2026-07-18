@@ -8,6 +8,13 @@ synthesis is a self-contained latency improvement. Live narration changes which
 component owns speaking and must solve selection, deduplication, turn identity,
 and Stop-hook races before it is safe to enable.
 
+It also closes a real gap in the Stop-hook approach: **interrupted turns are
+never narrated.** Because Raven speaks on `Stop`, a turn cut short by a new user
+message (rapid back-and-forth) never fires `Stop` and is silently skipped — see
+the README limits. Transcript-tailing narrates completed text *blocks*
+regardless of whether the turn was interrupted, so those replies are no longer
+lost.
+
 The useful capability is earlier narration from complete assistant text blocks:
 Raven can speak a finished block such as “I’ll check the writer state” while the
 same Claude turn continues through tool calls, then speak later completed blocks
