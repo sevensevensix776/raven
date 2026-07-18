@@ -22,6 +22,10 @@ struct SpokenLine: Codable, Identifiable, Equatable {
     let project: String
     let text: String
     let spokenAtEpoch: TimeInterval
+    private let roleRaw: String?
+
+    // Older transcript entries predate the role field — treat them as Claude.
+    var isUser: Bool { roleRaw == "user" }
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -29,6 +33,7 @@ struct SpokenLine: Codable, Identifiable, Equatable {
         case project
         case text
         case spokenAtEpoch = "spoken_at_epoch"
+        case roleRaw = "role"
     }
 }
 

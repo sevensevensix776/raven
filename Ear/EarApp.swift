@@ -185,23 +185,48 @@ private struct TranscriptRow: View {
     let line: SpokenLine
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack {
-                Text(line.project.isEmpty ? "Claude" : line.project)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Palette.gold)
-                Spacer()
-                Text(Date(timeIntervalSince1970: line.spokenAtEpoch), style: .relative)
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.35))
+        if line.isUser {
+            // Your turn — right-aligned, dimmed. Shown on screen, never spoken.
+            VStack(alignment: .trailing, spacing: 5) {
+                HStack(spacing: 6) {
+                    Spacer()
+                    Text("You")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.5))
+                    Text(Date(timeIntervalSince1970: line.spokenAtEpoch), style: .relative)
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.3))
+                }
+                Text(line.text)
+                    .font(.body)
+                    .foregroundStyle(.white.opacity(0.62))
+                    .multilineTextAlignment(.trailing)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .textSelection(.enabled)
             }
-            Text(line.text)
-                .font(.title3.weight(.regular))
-                .foregroundStyle(.white.opacity(0.94))
-                .lineSpacing(5)
-                .textSelection(.enabled)
+            .padding(.leading, 44)
+            .padding(.bottom, 2)
+        } else {
+            // Claude's reply — left, gold header, bright.
+            VStack(alignment: .leading, spacing: 7) {
+                HStack {
+                    Text(line.project.isEmpty ? "Claude" : line.project)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Palette.gold)
+                    Spacer()
+                    Text(Date(timeIntervalSince1970: line.spokenAtEpoch), style: .relative)
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.35))
+                }
+                Text(line.text)
+                    .font(.title3.weight(.regular))
+                    .foregroundStyle(.white.opacity(0.94))
+                    .lineSpacing(5)
+                    .textSelection(.enabled)
+            }
+            .padding(.trailing, 44)
+            .padding(.bottom, 2)
         }
-        .padding(.bottom, 2)
     }
 }
 
