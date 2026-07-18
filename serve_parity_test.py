@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run Python server.py and `raven serve` against one seeded Raven home.
 
-The current Python main hardcodes port 8080 and module-level ~/speech paths, so
+The current Python main hardcodes port 8080 and resolves its home from RAVEN_HOME, so
 this harness imports its unmodified handler, redirects those globals to the
 shared temporary RAVEN_HOME, and binds an ephemeral port. Production files are
 never written.
@@ -21,7 +21,7 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-PYTHON_SERVER = Path.home() / "speech" / "server.py"
+PYTHON_SERVER = Path.home() / "code" / "experiments" / "raven" / "server.py"
 
 PYTHON_RUNNER = r"""
 import os
@@ -188,6 +188,21 @@ def wait_ready(base, process, name):
     raise AssertionError(f"{name} did not become ready")
 
 
+# name/display/transcript_path are Go-only enrichments (local session title,
+# readable transcript rendering, transcript tailing) with no Python counterpart.
+# Strip them recursively so parity compares the shared contract, matching the
+# same normalization in parity_test.py.
+GO_ONLY_KEYS = ("name", "display", "transcript_path")
+
+
+def strip_go_only(value):
+    if isinstance(value, dict):
+        return {k: strip_go_only(v) for k, v in value.items() if k not in GO_ONLY_KEYS}
+    if isinstance(value, list):
+        return [strip_go_only(v) for v in value]
+    return value
+
+
 def normalized_health(value):
     value = dict(value)
     value["ts"] = "<timestamp>"
@@ -306,9 +321,9 @@ def main():
             wait_ready(python_base, python_process, "Python server")
             wait_ready(go_base, go_process, "Go server")
 
-            assert_json_pair(python_base, go_base, "/channels")
-            assert_json_pair(python_base, go_base, "/transcript?limit=2")
-            assert_json_pair(python_base, go_base, "/catchup?session=session-beta-456")
+            assert_json_pair(python_base, go_base, "/channels", normalize=strip_go_only)
+            assert_json_pair(python_base, go_base, "/transcript?limit=2", normalize=strip_go_only)
+            assert_json_pair(python_base, go_base, "/catchup?session=session-beta-456", normalize=strip_go_only)
             assert_json_pair(python_base, go_base, "/health", normalize=normalized_health)
             assert_json_pair(
                 python_base, go_base, "/active", "POST",

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Compare diagnose.py and `raven diagnose` on one isolated seeded home.
 
-The Python source hardcodes ~/speech, so HOME points at the temporary parent
-while Go receives the same directory through RAVEN_HOME. No live Raven files
-are read or changed.
+Both the Python source and Go resolve the runtime home from RAVEN_HOME, so both
+receive the same isolated seeded directory. No live Raven files are read or
+changed.
 
     go build -o raven . && python3 diagnose_parity_test.py
 """
@@ -19,7 +19,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 GO_BIN = ROOT / "raven"
-PYTHON_DIAGNOSE = Path.home() / "speech" / "diagnose.py"
+PYTHON_DIAGNOSE = Path.home() / "code" / "experiments" / "raven" / "diagnose.py"
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 HEARTBEAT_AGE = re.compile(r"\((-?\d+)s ago\)")
 
@@ -92,7 +92,8 @@ def main():
         seed(home)
 
         base_env = dict(os.environ)
-        python_env = {**base_env, "HOME": str(temp_root)}
+        # Both the Python source and Go honor RAVEN_HOME; drive them identically.
+        python_env = {**base_env, "RAVEN_HOME": str(home)}
         go_env = {**base_env, "RAVEN_HOME": str(home)}
         python_output = subprocess.run(
             [sys.executable, str(PYTHON_DIAGNOSE), "--since-min", "60"],

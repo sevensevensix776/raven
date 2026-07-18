@@ -1,5 +1,6 @@
 // Package diagnose reports Raven's live process, stream, queue, and event-log
-// health. Its metric definitions and presentation mirror ~/speech/diagnose.py.
+// health. Its metric definitions and presentation mirror the Python
+// diagnose.py in the Raven runtime home (~/code/experiments/raven).
 package diagnose
 
 import (

@@ -24,10 +24,10 @@ The project has no third-party Go dependencies; `go.mod` declares only the modul
 | Path | Responsibility |
 | --- | --- |
 | [`main.go`](./main.go) | CLI dispatch. Routes all four Raven subcommands. |
-| [`internal/hook`](./internal/hook) | Reads Claude Code hook JSON from stdin, updates channel state, applies selection gating, cleans eligible replies, and commits queue files atomically. Resolves `RAVEN_HOME`, falling back to `~/speech`. |
+| [`internal/hook`](./internal/hook) | Reads Claude Code hook JSON from stdin, updates channel state, applies selection gating, cleans eligible replies, and commits queue files atomically. Resolves `RAVEN_HOME`, falling back to `~/code/experiments/raven`. |
 | [`internal/clean`](./internal/clean) | Pure-Go port of the Bash `sed`/`tr` speech-cleaning pipeline: removes fenced code, inline code, Markdown punctuation, and long paths; collapses whitespace; applies a byte cap. |
 | [`internal/state`](./internal/state) | Maintains `channels.json` and `selection.json` under `.state.lock`: follow/pin semantics, `SessionEnd` removal and unstick, TTL pruning, a 50-channel ceiling, and the last three replies per channel. Writes compact JSON through atomic renames. |
-| [`internal/config`](./internal/config) | Reads `MAX_SPOKEN_CHARS`, `CHANNEL_TTL_HOURS`, and `IDLE_FLOOR` from `~/speech/config.sh` (or the overridden Raven home), with non-empty environment variables taking precedence. |
+| [`internal/config`](./internal/config) | Reads `MAX_SPOKEN_CHARS`, `CHANNEL_TTL_HOURS`, and `IDLE_FLOOR` from `~/code/experiments/raven/config.sh` (or the overridden Raven home), with non-empty environment variables taking precedence. |
 | [`internal/rlog`](./internal/rlog) | Appends fail-soft, Python-compatible structured records to `logs/events.jsonl`. Each record is emitted with one append write. |
 | [`internal/transcript`](./internal/transcript) | Adds selected user prompts and emitted Claude captions to `spoken.jsonl`. Serializes updates with `.transcript.lock`, writes atomically, and retains the last 200 lines. |
 | [`internal/serve`](./internal/serve) | Serves `<home>/hls`, updates the listener heartbeat, and implements the phone JSON API with Python-compatible state locking, ETags, health data, selection writes, and phone logs. |
@@ -101,7 +101,7 @@ python3 diagnose_parity_test.py
 install -m 0755 raven ~/.local/bin/raven
 ```
 
-Run the parity test after building: it expects `./raven`, the original hook at `~/.claude/hooks/speak-reply.sh`, and Raven’s Python compatibility helpers in `~/speech`.
+Run the parity test after building: it expects `./raven`, the original hook at `~/.claude/hooks/speak-reply.sh`, and Raven’s Python compatibility helpers in `~/code/experiments/raven`.
 
 For an isolated run, point the hook at a temporary Raven home. The directory must already exist; the hook intentionally no-ops when it does not.
 
@@ -112,10 +112,10 @@ printf '%s' '{"hook_event_name":"UserPromptSubmit","session_id":"demo","cwd":"/t
   | RAVEN_HOME="$RAVEN_TEST_HOME" ./raven hook
 ```
 
-Without the override, Raven uses `~/speech`:
+Without the override, Raven uses `~/code/experiments/raven`:
 
 ```bash
-RAVEN_HOME=/path/to/isolated/speech ~/.local/bin/raven hook
+RAVEN_HOME=/path/to/isolated/raven ~/.local/bin/raven hook
 ```
 
 The read-only diagnosis command accepts a lookback window in minutes:
@@ -128,7 +128,7 @@ The server binds `100.64.0.1:8080` by default. `RAVEN_BIND` or `--addr`
 can override it for testing:
 
 ```bash
-RAVEN_HOME=/path/to/isolated/speech raven serve --addr 127.0.0.1:8081
+RAVEN_HOME=/path/to/isolated/raven raven serve --addr 127.0.0.1:8081
 ```
 
 ### Configuration

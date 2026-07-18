@@ -37,13 +37,15 @@ type caption struct {
 	Display   string `json:"display"`
 }
 
-// Home resolves the Raven dir: RAVEN_HOME override (for tests) else ~/speech.
+// Home resolves the Raven dir: RAVEN_HOME override (for tests, and exported by
+// start.sh) else ~/code/experiments/raven. The Claude Code hook invokes this
+// binary with no environment, so this default must name the real runtime home.
 func Home() string {
 	if h := os.Getenv("RAVEN_HOME"); h != "" {
 		return h
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, "speech")
+	return filepath.Join(home, "code", "experiments", "raven")
 }
 
 // Run executes the hook against stdin. Always returns nil exit intent — the hook

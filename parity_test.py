@@ -16,7 +16,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-SPEECH_SRC = Path.home() / "speech"
+SPEECH_SRC = Path.home() / "code" / "experiments" / "raven"
 BASH_HOOK = Path.home() / ".claude/hooks/speak-reply.sh"
 GO_BIN = Path(__file__).parent / "raven"
 HELPERS = ["ravenlog.py", "transcript_user.py", "transcript_add.py"]

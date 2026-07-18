@@ -1,11 +1,11 @@
 #!/bin/bash
 # End-to-end PCM continuity/parity check. This uses an isolated RAVEN_HOME and
-# a temporary copy of writer.sh; it never touches or swaps the live ~/speech
+# a temporary copy of writer.sh; it never touches or swaps the live runtime home
 # writer, queue, FIFO, transcript, or logs.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")" && pwd)
-SOURCE_WRITER=${RAVEN_WRITER_SH:-"$HOME/speech/writer.sh"}
+SOURCE_WRITER=${RAVEN_WRITER_SH:-"$HOME/code/experiments/raven/writer.sh"}
 
 for command in go ffmpeg python3 sed mkfifo; do
   command -v "$command" >/dev/null || {
@@ -91,7 +91,10 @@ prepare_home "$BASH_NOISE_HOME" noise
 
 # Change only writer.sh's initial cwd in the temporary copy. Its loop, ffmpeg
 # arguments, gating, ordering, and cleanup logic remain the source version.
-sed 's#^cd ~/speech || exit 1$#cd "$RAVEN_HOME" || exit 1#' \
+# writer.sh self-locates its home from BASH_SOURCE; force the temp copy to the
+# isolated test home instead. Anchors on the `cd … || exit 1` shape so it stays
+# correct if writer.sh's cd form changes again.
+sed 's#^cd .* || exit 1$#cd "$RAVEN_HOME" || exit 1#' \
   "$SOURCE_WRITER" > "$TMP/writer.sh"
 chmod +x "$TMP/writer.sh"
 
