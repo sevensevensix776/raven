@@ -26,7 +26,7 @@ python3 spawn.py .ffmpeg.pid ffmpeg -re -f s16le -ar 24000 -ac 1 -i pcm.fifo \
   -hls_segment_type mpegts \
   hls/stream.m3u8
 
-python3 spawn.py .server.pid python3 server.py
+python3 spawn.py .server.pid "$HOME/.local/bin/raven" serve
 
 # synthd: warm Kokoro synthesis daemon (keeps the model loaded → ~0.1s/reply).
 # Uses the venv python that has mlx-audio + misaki installed.
