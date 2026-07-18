@@ -6,6 +6,7 @@ Q="$SPEECH/queue"
 SELECTION="$SPEECH/selection.json"
 
 [ -d "$SPEECH" ] || exit 0
+[ -f "$SPEECH/config.sh" ] && . "$SPEECH/config.sh"
 mkdir -p "$Q" 2>/dev/null
 payload=$(cat)
 
@@ -109,13 +110,16 @@ fi
 text="$raw_text"
 [ -z "${text// }" ] && exit 0
 
+# MAX_SPOKEN_CHARS=0 (or unset) => no cap: speak the whole reply.
+cap="${MAX_SPOKEN_CHARS:-0}"
+[ "$cap" -gt 0 ] 2>/dev/null || cap=100000000
 clean=$(printf '%s' "$text" \
   | sed -e '/^[[:space:]]*```/,/^[[:space:]]*```/d' \
         -e 's/`[^`]*`/ /g' \
         -e 's/[*_#>|]//g' \
         -e 's|/[A-Za-z0-9._/-]\{12,\}| that path |g' \
   | tr -s ' \n' ' ' \
-  | head -c 700)
+  | head -c "$cap")
 [ -z "${clean// }" ] && exit 0
 
 project=$(basename "$cwd" 2>/dev/null)

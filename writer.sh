@@ -60,6 +60,7 @@ while true; do
 
     # Record the utterance to the transcript the moment we start emitting it.
     python3 transcript_add.py "$metadata" 2>/dev/null
+    python3 ravenlog.py writer emit id="$(basename "$stem")" 2>/dev/null
 
     if [ "${f##*.}" = "txt" ]; then
       # Fallback path: synthd isn't running. `say` inline so we still speak.

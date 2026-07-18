@@ -16,3 +16,4 @@ selection.json
 spoken.jsonl
 .state.lock
 .bak/
+logs/

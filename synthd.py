@@ -18,6 +18,8 @@ import subprocess
 import time
 from pathlib import Path
 
+import ravenlog
+
 SPEECH = Path.home() / "speech"
 QUEUE = SPEECH / "queue"
 CONFIG = SPEECH / "config.sh"
@@ -134,18 +136,27 @@ def main():
         wav_part = QUEUE / f"{stamp}.wav.part"
         wav = QUEUE / f"{stamp}.wav"
         done = False
+        backend = "none"
+        t0 = time.time()
         if cfg["VOICE_BACKEND"] == "kokoro":
             try:
                 if synth.kokoro(text, cfg["KOKORO_VOICE"], cfg["KOKORO_MODEL"], wav_part):
                     os.replace(wav_part, wav)
                     done = True
+                    backend = "kokoro"
             except Exception as e:
                 print(f"[synthd] kokoro failed, say fallback: {e}", flush=True)
+                ravenlog.log("synthd", "kokoro_fail", id=stamp, err=str(e)[:200])
         if not done:
             try:
                 synth.say(text, cfg["SAY_VOICE"], wav)  # writes .aiff
+                backend = "say"
+                done = True
             except Exception as e:
                 print(f"[synthd] say fallback failed: {e}", flush=True)
+                ravenlog.log("synthd", "say_fail", id=stamp, err=str(e)[:200])
+        ravenlog.log("synthd", "synth", id=stamp, backend=backend, ok=done,
+                     ms=round((time.time() - t0) * 1000), chars=len(text))
         f.unlink(missing_ok=True)
         wav_part.unlink(missing_ok=True)
 

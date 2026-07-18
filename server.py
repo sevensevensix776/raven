@@ -9,7 +9,10 @@ import json
 import os
 import pathlib
 import tempfile
+import time
 import urllib.parse
+
+import ravenlog
 
 SPEECH = pathlib.Path.home() / "speech"
 ROOT = SPEECH / "hls"
@@ -19,6 +22,34 @@ SELECTION = SPEECH / "selection.json"
 SPOKEN = SPEECH / "spoken.jsonl"
 STATE_LOCK = SPEECH / ".state.lock"
 TAILSCALE_IP = os.environ.get("HUGINN_BIND", "100.64.0.1")
+
+
+def health_snapshot():
+    """Live pipeline state for GET /health — the automatic-diagnosis view."""
+    now = time.time()
+    try:
+        hb_age = round(now - HB.stat().st_mtime, 1)
+    except OSError:
+        hb_age = None
+    queue = SPEECH / "queue"
+    pending = {ext: len(list(queue.glob(f"*.{ext}"))) for ext in ("txt", "wav", "aiff")}
+    try:
+        last_spoken = json.loads(SPOKEN.read_text().splitlines()[-1])
+        if isinstance(last_spoken.get("text"), str):
+            last_spoken["chars"] = len(last_spoken["text"])
+            last_spoken["text"] = last_spoken["text"][:120]
+    except (OSError, IndexError, json.JSONDecodeError):
+        last_spoken = None
+    selection = read_json(SELECTION, {})
+    return {
+        "ts": round(now, 1),
+        "heartbeat_age_s": hb_age,
+        "listener_live": hb_age is not None and hb_age <= 10,
+        "queue_pending": pending,
+        "selection": {"mode": selection.get("mode"), "session_id": selection.get("session_id")},
+        "channels": len(read_json(CHANNELS, [])),
+        "last_spoken": last_spoken,
+    }
 
 
 @contextlib.contextmanager
@@ -109,6 +140,10 @@ class HuginnHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urllib.parse.urlsplit(self.path)
+        if parsed.path == "/health":
+            self.json_response(health_snapshot(), conditional=False)
+            return
+
         if parsed.path == "/channels":
             with state_lock():
                 channels = read_json(CHANNELS, [])
@@ -137,7 +172,11 @@ class HuginnHandler(http.server.SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self):
-        if urllib.parse.urlsplit(self.path).path != "/active":
+        path = urllib.parse.urlsplit(self.path).path
+        if path == "/log":
+            self.handle_log_upload()
+            return
+        if path != "/active":
             self.send_error(404)
             return
         try:
@@ -181,6 +220,33 @@ class HuginnHandler(http.server.SimpleHTTPRequestHandler):
             {"mode": state["mode"], "session_id": state.get("session_id")},
             conditional=False,
         )
+
+    def handle_log_upload(self):
+        """Phone POSTs its recent playback-log lines here so both sides of the
+        pipeline land in one place on the Mac for automatic diagnosis."""
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            self.send_error(400)
+            return
+        if not 0 < length <= 262144:
+            self.send_error(413, "Body must be 1..256KiB")
+            return
+        try:
+            body = json.loads(self.rfile.read(length))
+            lines = body.get("lines", [])
+            device = body.get("device", "iphone")
+        except (json.JSONDecodeError, UnicodeDecodeError, AttributeError):
+            self.send_error(400, "Invalid JSON")
+            return
+        phone_log = SPEECH / "logs" / "phone.jsonl"
+        phone_log.parent.mkdir(parents=True, exist_ok=True)
+        with phone_log.open("a", encoding="utf-8") as f:
+            for line in lines[:2000]:
+                f.write(json.dumps({"device": device, "line": str(line)[:2000]},
+                                   separators=(",", ":")) + "\n")
+        ravenlog.log("phone", "log_upload", device=device, n=len(lines))
+        self.json_response({"received": len(lines)}, conditional=False)
 
     def log_message(self, *_):
         pass

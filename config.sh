@@ -18,3 +18,7 @@ SUMMARY_MODEL=qwen3:1.7b
 # Between replies: noise = proven low floor that keeps the app alive;
 # silence = true digital silence (kills the static) — GATED on a device test.
 IDLE_FLOOR=noise
+
+# Max characters spoken per reply. 700 was clipping real replies mid-sentence.
+# 2500 ~= up to ~3 min of speech. For very long replies, turn SUMMARIZE on.
+MAX_SPOKEN_CHARS=0   # 0 = no cap (speak the whole reply)
