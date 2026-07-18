@@ -34,7 +34,7 @@ registry_line=$(printf '%s' "$raw_text" | tr '\n' ' ' | tr -s ' ' | head -c 180)
 
 # Registry and follow-mode state share one lock with server.py. A phone pin and
 # a UserPromptSubmit can no longer overwrite each other with torn mode/active files.
-python3 - "$SPEECH" "$event" "$session" "$cwd" "$registry_line" <<'PY' 2>/dev/null
+CHANNEL_TTL_HOURS="${CHANNEL_TTL_HOURS:-6}" python3 - "$SPEECH" "$event" "$session" "$cwd" "$registry_line" <<'PY' 2>/dev/null
 import fcntl, json, os, pathlib, sys, tempfile, time
 
 speech = pathlib.Path(sys.argv[1])
@@ -56,24 +56,41 @@ def write(path, value):
         handle.flush(); os.fsync(handle.fileno())
     os.replace(temporary, path)
 
+ttl_hours = float(os.environ.get("CHANNEL_TTL_HOURS") or 6)
+
 with (speech / ".state.lock").open("a+") as lock:
     fcntl.flock(lock, fcntl.LOCK_EX)
     now = time.time()
     state = read(selection_path, {
         "mode": "follow", "session_id": None, "follow_session_id": None
     })
+    # Always drop the session's old row; re-add it below unless it just ended.
     channels = [
         channel for channel in read(channels_path, [])
         if channel.get("session_id") != session
     ]
-    channels.append({
-        "session_id": session,
-        "project": pathlib.Path(cwd).name if cwd != "-" else "",
-        "last_active_epoch": now,
-        "last_line": last_line,
-    })
+
+    if event == "SessionEnd":
+        # Session quit -> remove it from the picker and unstick any selection
+        # that pointed at it, so narration doesn't cling to a dead channel.
+        if state.get("follow_session_id") == session:
+            state["follow_session_id"] = None
+        if state.get("session_id") == session:
+            state["mode"] = "follow"
+            state["session_id"] = state.get("follow_session_id")
+        write(selection_path, state)
+    else:
+        channels.append({
+            "session_id": session,
+            "project": pathlib.Path(cwd).name if cwd != "-" else "",
+            "last_active_epoch": now,
+            "last_line": last_line,
+        })
+
+    # Backstop for abrupt closes (terminal killed -> no SessionEnd): expire idle
+    # rows after CHANNEL_TTL_HOURS. A pinned session is always kept.
     pinned = state.get("session_id") if state.get("mode") == "pinned" else None
-    cutoff = now - 24 * 60 * 60
+    cutoff = now - ttl_hours * 3600
     channels = [
         channel for channel in channels
         if channel.get("last_active_epoch", 0) >= cutoff

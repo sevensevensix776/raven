@@ -22,3 +22,7 @@ IDLE_FLOOR=noise
 # Max characters spoken per reply. 700 was clipping real replies mid-sentence.
 # 2500 ~= up to ~3 min of speech. For very long replies, turn SUMMARIZE on.
 MAX_SPOKEN_CHARS=0   # 0 = no cap (speak the whole reply)
+
+# Drop idle sessions from the channel picker after this many hours (backstop for
+# abrupt closes; clean quits are removed instantly via the SessionEnd hook).
+CHANNEL_TTL_HOURS=6
