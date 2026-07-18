@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Huginn synthesis daemon.
 
-Watches ~/speech/queue for *.txt (dropped by the Stop hook) and converts each
+Watches $RAVEN_HOME/queue for *.txt (dropped by the Stop hook) and converts each
 to a *.wav the writer muxes into the stream. Keeps the Kokoro model loaded so
 synthesis is ~0.1s warm instead of ~2.7s cold per reply.
 
@@ -20,7 +20,7 @@ from pathlib import Path
 
 import ravenlog
 
-SPEECH = Path.home() / "speech"
+SPEECH = Path(os.environ.get("RAVEN_HOME") or Path.home() / "code" / "experiments" / "raven")
 QUEUE = SPEECH / "queue"
 CONFIG = SPEECH / "config.sh"
 

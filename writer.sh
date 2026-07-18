@@ -11,7 +11,7 @@
 #
 # Listener gating via .heartbeat: an HLS client polls the playlist ~every 2s.
 # No poll in 10s => nobody listening => hold the queue instead of broadcasting.
-cd ~/speech || exit 1
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 1
 [ -f config.sh ] && . ./config.sh
 IDLE_FLOOR="${IDLE_FLOOR:-noise}"
 HB=hls/.heartbeat

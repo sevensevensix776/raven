@@ -14,7 +14,7 @@ import sys
 import time
 from pathlib import Path
 
-LOGDIR = Path(os.environ.get("RAVEN_HOME") or Path.home() / "speech") / "logs"
+LOGDIR = Path(os.environ.get("RAVEN_HOME") or Path.home() / "code" / "experiments" / "raven") / "logs"
 EVENTS = LOGDIR / "events.jsonl"
 MAX_LINES = 20000  # trim threshold; keeps the file bounded without a cron
 

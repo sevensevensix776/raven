@@ -2,7 +2,7 @@
 """Raven automatic diagnosis: one command that reads live state + the unified
 event log and tells you whether the pipeline is healthy and what's wrong.
 
-    python3 ~/speech/diagnose.py [--since-min N]
+    python3 ~/code/experiments/raven/diagnose.py [--since-min N]
 """
 import json
 import os
@@ -12,7 +12,7 @@ import time
 from collections import Counter
 from pathlib import Path
 
-SPEECH = Path.home() / "speech"
+SPEECH = Path(os.environ.get("RAVEN_HOME") or Path.home() / "code" / "experiments" / "raven")
 EVENTS = SPEECH / "logs" / "events.jsonl"
 PHONE = SPEECH / "logs" / "phone.jsonl"
 

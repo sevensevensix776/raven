@@ -1,5 +1,5 @@
 # Huginn voice config — sourced by synthd and writer.
-# Change a value, then: ~/speech/stop.sh && ~/speech/start.sh
+# Change a value, then: ~/code/experiments/raven/stop.sh && ~/code/experiments/raven/start.sh
 
 # Voice backend: kokoro | say
 VOICE_BACKEND=kokoro

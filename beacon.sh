@@ -6,13 +6,14 @@
 # know not just whether it died but exactly WHEN — the last time you hear is
 # the moment iOS took the session.
 #
-#   ~/speech/beacon.sh          -> every 30s
-#   ~/speech/beacon.sh 60       -> every 60s
+#   ~/code/experiments/raven/beacon.sh          -> every 30s
+#   ~/code/experiments/raven/beacon.sh 60       -> every 60s
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INTERVAL="${1:-30}"
 n=0
 while true; do
   n=$((n+1))
-  "$HOME/speech/say.sh" "Mark $n. $(date +'%-I %M and %S seconds')." >/dev/null
+  "$HERE/say.sh" "Mark $n. $(date +'%-I %M and %S seconds')." >/dev/null
   echo "[$(date +%H:%M:%S)] mark $n spoken"
   python3 -c "import time;time.sleep($INTERVAL)"
 done

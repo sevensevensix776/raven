@@ -29,7 +29,7 @@ Freshness matters more than perfect prose continuity while driving. The cut will
 
 **Code — atomically commit the new reply, mark it latest, and change the interrupt token.**
 
-Replace the final `mv` pair in [speak-reply.sh](/Users/asifahmed/speech/hooks/speak-reply.sh) with:
+Replace the final `mv` pair in [speak-reply.sh](/Users/asifahmed/code/experiments/raven/hooks/speak-reply.sh) with:
 
 ```bash
 # Queue commit + latest-wins signal share a lock with /skip.
@@ -153,13 +153,13 @@ This prevents an old synthesis already underway from “resurrecting” after a 
 
 This is viable because the parent writer still owns the FIFO’s write descriptor, so killing the child does not send EOF downstream. Poll a generation token every 50ms, terminate the child within 200ms, and immediately write a 500ms idle block.
 
-**Code — core replacement for [writer.sh](/Users/asifahmed/speech/writer.sh).**
+**Code — core replacement for [writer.sh](/Users/asifahmed/code/experiments/raven/writer.sh).**
 
 ```bash
 #!/bin/bash
 set -uo pipefail
 
-cd "$HOME/speech" || exit 1
+cd "$HOME/code/experiments/raven" || exit 1
 [ -f config.sh ] && . ./config.sh
 
 IDLE_FLOOR="${IDLE_FLOOR:-noise}"
@@ -330,7 +330,7 @@ A client seek only discards buffered HLS audio. If the writer is still emitting 
 
 **Code — server endpoint.**
 
-Add to [server.py](/Users/asifahmed/speech/server.py):
+Add to [server.py](/Users/asifahmed/code/experiments/raven/server.py):
 
 ```python
 QUEUE = SPEECH / "queue"
@@ -495,7 +495,7 @@ The writer process’s stdout remains open for its entire lifetime, so killing i
 
 ```bash
 python3 spawn.py .writer.pid \
-  bash -c 'exec "$HOME/speech/writer.sh" > "$HOME/speech/pcm.fifo"'
+  bash -c 'exec "$HOME/code/experiments/raven/writer.sh" > "$HOME/code/experiments/raven/pcm.fifo"'
 
 # This PID must survive skips and preemptions.
 python3 spawn.py .ffmpeg.pid \
@@ -526,16 +526,16 @@ The persistent encoder sees one continuous raw format and monotonically generate
 **Device test required:** run 20–50 interruptions at the beginning, middle, and end of long clips while locked/backgrounded and on the car route. Verify:
 
 ```bash
-hls_pid_before="$(cat "$HOME/speech/.ffmpeg.pid")"
+hls_pid_before="$(cat "$HOME/code/experiments/raven/.ffmpeg.pid")"
 
 curl -fsS -X POST \
   "http://100.64.0.1:8080/skip"
 
-hls_pid_after="$(cat "$HOME/speech/.ffmpeg.pid")"
+hls_pid_after="$(cat "$HOME/code/experiments/raven/.ffmpeg.pid")"
 
 test "$hls_pid_before" = "$hls_pid_after"
 kill -0 "$hls_pid_after"
-tail -50 "$HOME/speech/logs/events.jsonl"
+tail -50 "$HOME/code/experiments/raven/logs/events.jsonl"
 ```
 
 Also confirm no 20-second watchdog event, no HLS PID replacement, and monotonically increasing `EXT-X-MEDIA-SEQUENCE`.
@@ -553,7 +553,7 @@ entry["spoken_at_epoch"] = time.time()
 entry["delivery_status"] = "playing"
 ```
 
-Add `~/speech/transcript_finish.py`:
+Add `~/code/experiments/raven/transcript_finish.py`:
 
 ```python
 #!/usr/bin/env python3
@@ -564,7 +564,7 @@ import sys
 import tempfile
 import time
 
-speech = pathlib.Path.home() / "speech"
+speech = pathlib.Path.home() / "code" / "experiments" / "raven"
 spoken = speech / "spoken.jsonl"
 
 if len(sys.argv) != 3:
@@ -697,7 +697,7 @@ Freshness matters more than perfect prose continuity while driving. The cut will
 
 **Code — atomically commit the new reply, mark it latest, and change the interrupt token.**
 
-Replace the final `mv` pair in [speak-reply.sh](/Users/asifahmed/speech/hooks/speak-reply.sh) with:
+Replace the final `mv` pair in [speak-reply.sh](/Users/asifahmed/code/experiments/raven/hooks/speak-reply.sh) with:
 
 ```bash
 # Queue commit + latest-wins signal share a lock with /skip.
@@ -821,13 +821,13 @@ This prevents an old synthesis already underway from “resurrecting” after a 
 
 This is viable because the parent writer still owns the FIFO’s write descriptor, so killing the child does not send EOF downstream. Poll a generation token every 50ms, terminate the child within 200ms, and immediately write a 500ms idle block.
 
-**Code — core replacement for [writer.sh](/Users/asifahmed/speech/writer.sh).**
+**Code — core replacement for [writer.sh](/Users/asifahmed/code/experiments/raven/writer.sh).**
 
 ```bash
 #!/bin/bash
 set -uo pipefail
 
-cd "$HOME/speech" || exit 1
+cd "$HOME/code/experiments/raven" || exit 1
 [ -f config.sh ] && . ./config.sh
 
 IDLE_FLOOR="${IDLE_FLOOR:-noise}"
@@ -998,7 +998,7 @@ A client seek only discards buffered HLS audio. If the writer is still emitting 
 
 **Code — server endpoint.**
 
-Add to [server.py](/Users/asifahmed/speech/server.py):
+Add to [server.py](/Users/asifahmed/code/experiments/raven/server.py):
 
 ```python
 QUEUE = SPEECH / "queue"
@@ -1163,7 +1163,7 @@ The writer process’s stdout remains open for its entire lifetime, so killing i
 
 ```bash
 python3 spawn.py .writer.pid \
-  bash -c 'exec "$HOME/speech/writer.sh" > "$HOME/speech/pcm.fifo"'
+  bash -c 'exec "$HOME/code/experiments/raven/writer.sh" > "$HOME/code/experiments/raven/pcm.fifo"'
 
 # This PID must survive skips and preemptions.
 python3 spawn.py .ffmpeg.pid \
@@ -1194,16 +1194,16 @@ The persistent encoder sees one continuous raw format and monotonically generate
 **Device test required:** run 20–50 interruptions at the beginning, middle, and end of long clips while locked/backgrounded and on the car route. Verify:
 
 ```bash
-hls_pid_before="$(cat "$HOME/speech/.ffmpeg.pid")"
+hls_pid_before="$(cat "$HOME/code/experiments/raven/.ffmpeg.pid")"
 
 curl -fsS -X POST \
   "http://100.64.0.1:8080/skip"
 
-hls_pid_after="$(cat "$HOME/speech/.ffmpeg.pid")"
+hls_pid_after="$(cat "$HOME/code/experiments/raven/.ffmpeg.pid")"
 
 test "$hls_pid_before" = "$hls_pid_after"
 kill -0 "$hls_pid_after"
-tail -50 "$HOME/speech/logs/events.jsonl"
+tail -50 "$HOME/code/experiments/raven/logs/events.jsonl"
 ```
 
 Also confirm no 20-second watchdog event, no HLS PID replacement, and monotonically increasing `EXT-X-MEDIA-SEQUENCE`.
@@ -1221,7 +1221,7 @@ entry["spoken_at_epoch"] = time.time()
 entry["delivery_status"] = "playing"
 ```
 
-Add `~/speech/transcript_finish.py`:
+Add `~/code/experiments/raven/transcript_finish.py`:
 
 ```python
 #!/usr/bin/env python3
@@ -1232,7 +1232,7 @@ import sys
 import tempfile
 import time
 
-speech = pathlib.Path.home() / "speech"
+speech = pathlib.Path.home() / "code" / "experiments" / "raven"
 spoken = speech / "spoken.jsonl"
 
 if len(sys.argv) != 3:

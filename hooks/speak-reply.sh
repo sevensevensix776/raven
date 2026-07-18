@@ -1,7 +1,7 @@
 #!/bin/bash
 set -uo pipefail
 
-SPEECH="${RAVEN_HOME:-$HOME/speech}"
+SPEECH="${RAVEN_HOME:-$HOME/code/experiments/raven}"
 Q="$SPEECH/queue"
 SELECTION="$SPEECH/selection.json"
 

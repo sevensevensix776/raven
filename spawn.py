@@ -9,7 +9,8 @@ import subprocess
 import sys
 
 pidfile, cmd = sys.argv[1], sys.argv[2:]
-log = open(os.path.expanduser("~/speech/.detached.log"), "a")
+HOME = os.path.dirname(os.path.abspath(__file__))  # the raven runtime dir
+log = open(os.path.join(HOME, ".detached.log"), "a")
 
 p = subprocess.Popen(
     cmd,
@@ -17,6 +18,6 @@ p = subprocess.Popen(
     stdout=log,
     stderr=log,
     start_new_session=True,  # os.setsid() in the child
-    cwd=os.path.expanduser("~/speech"),
+    cwd=HOME,
 )
 open(pidfile, "w").write(str(p.pid))

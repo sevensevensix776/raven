@@ -1,10 +1,11 @@
 #!/bin/bash
 # Inject a spoken line into the live stream.
-#   ~/speech/say.sh "background playback is alive"
+#   ~/code/experiments/raven/say.sh "background playback is alive"
 #
-# mktemp + mv is load-bearing: writing straight into queue/ races writer.sh,
+# mktemp + mv is load-bearing: writing straight into queue/ races the writer,
 # which would grab a half-written file. mv within a filesystem is atomic.
-Q="$HOME/speech/queue"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+Q="$HERE/queue"
 mkdir -p "$Q"
 text="$*"
 [ -z "${text// }" ] && { echo "usage: say.sh <text>"; exit 1; }

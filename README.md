@@ -72,14 +72,14 @@ The `UserPromptSubmit` and `Stop` hooks belong to the Claude Code session runtim
 ### Start and stop the Mac pipeline
 
 ```bash
-~/speech/start.sh
+~/code/experiments/raven/start.sh
 raven diagnose
 ```
 
-`start.sh` first stops any recorded prior processes, recreates the HLS output, and launches `raven write`, the encoder, `raven serve`, and the Python synthesis daemon in detached sessions. Their combined stdout and stderr go to `~/speech/.detached.log`.
+`start.sh` first stops any recorded prior processes, recreates the HLS output, and launches `raven write`, the encoder, `raven serve`, and the Python synthesis daemon in detached sessions. Their combined stdout and stderr go to `~/code/experiments/raven/.detached.log`.
 
 ```bash
-~/speech/stop.sh
+~/code/experiments/raven/stop.sh
 ```
 
 Stopping removes the four PID files and sweeps known child processes. It does not delete recent queue jobs; the writer independently discards jobs older than ten minutes.
@@ -108,7 +108,7 @@ Tap **Mute** in Raven. This sets `AVPlayer.isMuted`; the player, audio session, 
 ### Test the audio path
 
 ```bash
-~/speech/say.sh "Raven audio path is live."
+~/code/experiments/raven/say.sh "Raven audio path is live."
 ```
 
 This queues a macOS `say` clip directly. It is useful for proving FIFO → HLS → iPhone playback, but it bypasses the Claude hook, Kokoro, and transcript metadata.
@@ -119,16 +119,16 @@ This queues a macOS `say` clip directly. It is useful for proving FIFO → HLS �
 raven diagnose
 raven diagnose --since-min 15
 curl -fsS http://100.64.0.1:8080/health | python3 -m json.tool
-tail -100 ~/speech/logs/events.jsonl
-tail -100 ~/speech/logs/phone.jsonl
-tail -100 ~/speech/.detached.log
+tail -100 ~/code/experiments/raven/logs/events.jsonl
+tail -100 ~/code/experiments/raven/logs/phone.jsonl
+tail -100 ~/code/experiments/raven/.detached.log
 ```
 
 `raven diagnose` verifies all four process PIDs, listener heartbeat age, queue depth, channel selection, recent synthesis backends and latency, gate skips, fallback errors, and uploaded phone evidence. `EarPlayback.log` progress is strong evidence that media time advanced in `AVPlayer`; it is not proof that sound reached the car speakers.
 
 ## Configuration
 
-Edit `~/speech/config.sh`, then restart with `~/speech/stop.sh && ~/speech/start.sh` for a predictable full reload.
+Edit `~/code/experiments/raven/config.sh`, then restart with `~/code/experiments/raven/stop.sh && ~/code/experiments/raven/start.sh` for a predictable full reload.
 
 | Setting | Current value | Meaning |
 |---|---:|---|

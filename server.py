@@ -14,7 +14,7 @@ import urllib.parse
 
 import ravenlog
 
-SPEECH = pathlib.Path.home() / "speech"
+SPEECH = pathlib.Path(os.environ.get("RAVEN_HOME") or pathlib.Path.home() / "code" / "experiments" / "raven")
 ROOT = SPEECH / "hls"
 HB = ROOT / ".heartbeat"
 CHANNELS = SPEECH / "channels.json"

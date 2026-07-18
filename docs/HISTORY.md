@@ -165,7 +165,7 @@ Summarization exists behind a disabled flag and remains untuned. It addresses to
 
 At the end of the session, Raven was a working three-part system:
 
-- `~/speech` owns the Mac runtime, the Python Kokoro daemon, HLS process management, state, and operational docs.
+- `~/code/experiments/raven` owns the Mac runtime, the Python Kokoro daemon, HLS process management, state, and operational docs.
 - `~/code/experiments/raven-go` owns the dependency-free Go orchestration binary and parity harnesses.
 - `~/code/experiments/ear` owns the native iPhone app whose internal target is `Ear` and display name is Raven.
 

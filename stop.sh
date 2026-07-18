@@ -1,12 +1,13 @@
 #!/bin/bash
-cd ~/speech || exit 1
+RAVEN_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$RAVEN_HOME" || exit 1
 for p in .writer.pid .ffmpeg.pid .server.pid .synthd.pid; do
   [ -f "$p" ] && kill "$(cat "$p")" 2>/dev/null
   rm -f "$p"
 done
-# writer.sh spawns ffmpeg children in a loop; sweep them.
-pkill -f 'anoisesrc=r=24000' 2>/dev/null
-pkill -f 'speech/pcm.fifo' 2>/dev/null
-pkill -f 'speech/server.py' 2>/dev/null
-pkill -f 'speech/synthd.py' 2>/dev/null
+# Sweep any orphans the pidfiles missed (process-name patterns, home-independent).
+pkill -f 'anoisesrc=r=24000' 2>/dev/null   # writer's noise-floor ffmpeg children
+pkill -f 'raven write' 2>/dev/null
+pkill -f 'raven serve' 2>/dev/null
+pkill -f 'synthd.py' 2>/dev/null
 echo "stopped"
