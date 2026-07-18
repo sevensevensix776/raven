@@ -14,8 +14,8 @@ mkdir -p hls queue
 [ -p pcm.fifo ] || mkfifo pcm.fifo
 rm -f hls/*.ts hls/*.m3u8 hls/.heartbeat
 
-# writer.sh's stdout must BE the fifo, hence the bash -c wrapper.
-python3 spawn.py .writer.pid bash -c 'exec ~/speech/writer.sh > ~/speech/pcm.fifo'
+# raven write's stdout must BE the fifo, hence the bash -c wrapper.
+python3 spawn.py .writer.pid bash -c 'exec $HOME/.local/bin/raven write > $HOME/speech/pcm.fifo'
 
 # -re is mandatory. Without it ffmpeg drains the FIFO at ~8x real time and
 # destroys the live timeline (measured: MEDIA-SEQUENCE hit 80 in 20s).
