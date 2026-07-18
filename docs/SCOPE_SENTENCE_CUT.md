@@ -105,7 +105,7 @@ Sentence-boundary cut changes one policy decision inside that design:
 
 | Event | Hard latest-wins baseline | Stage-2 sentence cut |
 |---|---|---|
-| New selected reply | Kill the active decoder immediately. | Finish the active 8–15-second chunk, then preempt before the next chunk. |
+| New selected reply | Kill the active decoder immediately. | Finish the active streamed part, then preempt before the next part. |
 | Manual Skip | Kill immediately. | Kill immediately; unchanged. |
 | Superseded queued reply not yet started | Drop it. | Drop it; unchanged. |
 | HLS encoder and FIFO | Preserve continuously. | Preserve continuously; unchanged. |
@@ -122,7 +122,7 @@ bounded rather than allowed to finish.
 
 Chunk length is the tuning lever:
 
-- shorter chunks switch sooner but create more synthesis artifacts, handoffs, manifests, and possible prosody seams;
+- shorter chunks switch sooner but create more synthesis artifacts, handoffs, metadata, and possible prosody seams;
 - longer chunks sound more continuous but make a newer answer wait longer; and
 - sentence-only grouping is more natural but produces variable timing.
 
@@ -132,12 +132,13 @@ boundaries require it.
 
 ## Rollout and verification
 
-1. Implement and soak-test hard latest-wins first, including 20–50 mid-clip interruptions with the phone locked and on the car audio route.
-2. Implement and prove streaming synthesis, including atomic part publication,
+1. Implement and prove streaming synthesis, including atomic part publication,
    terminal completeness, restart behavior, and whole-audio parity.
-3. Play a fixed story containing abbreviations, decimals, short sentences, and
+2. Play a fixed story containing abbreviations, decimals, short sentences, and
    very long sentences. Confirm yielded boundaries never drop or duplicate
    audio and are acceptable preemption points.
+3. Implement and soak-test hard latest-wins, including 20–50 mid-clip
+   interruptions with the phone locked and on the car audio route.
 4. Enable boundary checks for automatic `new:` events while leaving `skip:` immediate.
 5. Measure actual yielded-part durations on a real drive. If grouping is needed,
    compare candidate windows and record arrival-to-cut time and whether the

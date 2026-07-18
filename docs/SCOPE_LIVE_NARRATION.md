@@ -156,7 +156,9 @@ transcript identity when present:
 block_key = sha256(session_id || message_id || content_block_index)
 ```
 
-Also store a normalized text hash for Stop coordination:
+Also store a normalized text hash for Stop coordination. Hash the clean caption
+text before adding `In <project>.`; both the tailer and Stop hook must call the
+same cleaning/hash helper:
 
 ```text
 text_hash = sha256(cleaned_spoken_text)
@@ -176,7 +178,8 @@ Do not use text hash alone as the block identity. Claude can legitimately emit
 the same short sentence twice in one session; deduplicating only by text would
 drop the second occurrence.
 
-Store, for example, the newest 2,048 block keys and current-turn text hashes in
+Store, for example, the newest 2,048 block keys plus the current turn's ordered
+`(block_key, text_hash, line_end_offset)` records in
 `tail-state/<session>.json`, written atomically. The file cursor handles normal
 append-only progress; the seen-set handles restarts, partial queue commits, and
 reprocessing around a line boundary.
@@ -206,9 +209,10 @@ tailer or by the Stop hook.
 
 ### Normal path: tailer is alive
 
-The Stop hook should not enqueue the final block directly. Instead it atomically
-writes a stop intent containing the current session, turn ID, cleaned final text,
-caption fields, and `text_hash`:
+The Stop hook should not enqueue the final block directly. Instead it stats the
+selected transcript and atomically writes a stop intent containing the current
+session, turn ID, clean final caption text, caption fields, `text_hash`, and the
+transcript identity/size observed by Stop:
 
 ```json
 {
@@ -217,19 +221,28 @@ caption fields, and `text_hash`:
   "turn_id": "...",
   "text_hash": "...",
   "text": "final cleaned block",
+  "device": 16777220,
+  "inode": 12345,
+  "transcript_end_offset": 999999,
   "created_at_epoch": 0
 }
 ```
 
 The tailer owns resolution:
 
-1. Drain that transcript through the current EOF, committing all unseen blocks.
-2. If the stop intent's `text_hash` is already in the current turn's successfully
-   enqueued text hashes, mark the intent satisfied and do not enqueue it.
-3. If it is absent, wait one short grace interval (start with 500 ms), drain once
-   more to close the append-vs-Stop race, then enqueue the Stop text exactly once
-   using a key derived from `(session_id, turn_id, "stop_fallback", text_hash)`.
-4. Persist the key/hash before atomically marking the stop intent resolved.
+1. Drain that transcript through at least `transcript_end_offset`, then through
+   the current newline-terminated EOF, committing all unseen blocks.
+2. Find the last eligible assistant text block at or before the Stop offset. If
+   its `text_hash` matches the intent and that exact `block_key` is recorded as
+   successfully enqueued, mark the intent satisfied. Do not treat the presence
+   of the same text hash anywhere else in the turn as proof; identical prose can
+   legitimately occur twice.
+3. If no exact final block match exists, wait one short grace interval (start
+   with 500 ms), stat and drain once more to close an append-vs-Stop race, then
+   repeat the exact-block check.
+4. If it is still absent, enqueue the Stop text exactly once using a key derived
+   from `(session_id, turn_id, "stop_fallback", text_hash)`.
+5. Persist the key/hash before atomically marking the stop intent resolved.
 
 The tailer may see the final transcript line before or after the Stop event; the
 result is the same. The grace interval affects only the missing-block safety path

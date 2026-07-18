@@ -1,0 +1,34 @@
+flowchart LR
+    P0["Phase 0<br/>Two hours of driving<br/>Voice-in works; replies are unreadable"]
+    P1["Phase 1<br/>Research<br/>OSS, TTS economics, iOS constraints"]
+    V1["Phase 2 · v1 ghost<br/>Native full duplex<br/>Mic complexity; background unverified"]
+    R["Phase 3 · Raven v2<br/>Reframe to voice-out only<br/>Remote Control keeps voice-in"]
+    A["Phase 4<br/>Stop hook → Kokoro → continuous HLS<br/>Tailscale → native iPhone player"]
+    PROOF["First proof<br/>Playback survives background + screen-off"]
+    B["Phase 5<br/>Driving-led build-out<br/>Channels, transcript, mute, catch-up"]
+    G["Phase 6<br/>Go migration<br/>hook + serve + write + diagnose"]
+    BUGS["Phase 7<br/>Live corrections<br/>double-speak · exit 137 · prompt pollution"]
+    NEXT["Phase 8<br/>Current frontier<br/>sentence-streamed synthesis"]
+    LATER["Later / higher risk<br/>latest-wins · sentence cuts · live narration"]
+
+    P0 --> P1 --> V1
+    V1 -->|"delete unnecessary mic ownership"| R
+    R --> A --> PROOF --> B --> G --> BUGS --> NEXT --> LATER
+
+    V1 -. claimed proof without evidence .-> PROOF
+    P1 -. Kokoro local economics .-> A
+    P1 -. background capture differs from playback .-> R
+
+    classDef problem fill:#2b2d42,color:#ffffff,stroke:#8d99ae,stroke-width:2px
+    classDef rejected fill:#5b2333,color:#ffffff,stroke:#ef476f,stroke-width:2px
+    classDef pivot fill:#3a506b,color:#ffffff,stroke:#5bc0be,stroke-width:3px
+    classDef built fill:#214e34,color:#ffffff,stroke:#6ede8a,stroke-width:2px
+    classDef proof fill:#493548,color:#ffffff,stroke:#f4d35e,stroke-width:3px
+    classDef frontier fill:#3d348b,color:#ffffff,stroke:#b8b8ff,stroke-width:2px
+
+    class P0,P1 problem
+    class V1 rejected
+    class R pivot
+    class A,B,G,BUGS built
+    class PROOF proof
+    class NEXT,LATER frontier

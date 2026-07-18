@@ -1,0 +1,74 @@
+flowchart TD
+    NEED["Need: hear Claude Code safely<br/>during ~2h/day of driving"]
+
+    BOUNDARY{"Who owns voice-in?"}
+    REMOTE["Claude Code Remote Control<br/>+ iOS dictation"]
+    FULL["Raven open mic / full duplex"]
+
+    EVENT{"How does Raven receive replies?"}
+    HOOK["Claude Code lifecycle hooks<br/>Claude.ai subscription"]
+    SDK["Agent SDK token stream<br/>API key + separate credits"]
+
+    TTS{"Where is speech synthesized?"}
+    KOKORO["Local Kokoro-82M<br/>~$0 · private · flatter prosody"]
+    ELEVEN["ElevenLabs<br/>~$288–300/mo at expected usage"]
+
+    PLAYER{"How does the phone play it?"}
+    NATIVE["Native SwiftUI<br/>AVPlayer + background audio + retry"]
+    PWA["PWA<br/>simpler, weaker lifecycle control"]
+
+    TRANSPORT{"How do devices connect?"}
+    TAIL["Tailscale<br/>private tailnet · no relay"]
+    CLOUD["Public cloud relay<br/>hosting + auth + third party"]
+
+    STREAM{"How does playback stay alive?"}
+    HLS["One persistent HLS timeline<br/>comfort-noise floor"]
+    CLIPS["Per-reply files / digital silence<br/>suspension + clipped first word"]
+
+    AUDIO{"Who owns car audio?"}
+    NONMIX["Non-mixable .playback<br/>Now Playing / CarPlay controls"]
+    DUCK["Mix / duck other audio<br/>risk of drive-long attenuation"]
+
+    LANG{"Where is the runtime boundary?"}
+    GO["Go: hook + serve + write + diagnose<br/>~1 ms hook startup"]
+    PY["Python: warm synthd only<br/>Kokoro / mlx-audio boundary"]
+    BASH["Bash + heredoc orchestration<br/>quoting and installed-source drift"]
+
+    DELIVERY{"How much and how soon?"}
+    WHOLE["Uncapped full replies<br/>whole-reply synthesis today"]
+    CAP["Character cap<br/>fast but arbitrary mid-sentence cuts"]
+    SENTENCE["Next: sentence-streamed synthesis<br/>subscription-safe fast first word"]
+    TOKEN["Token streaming<br/>ruled out on subscription"]
+
+    NEED --> BOUNDARY
+    BOUNDARY -->|"chosen"| REMOTE --> EVENT
+    BOUNDARY -->|"ruled out for Raven"| FULL
+    EVENT -->|"chosen"| HOOK --> TTS
+    EVENT -->|"ruled out"| SDK
+    TTS -->|"chosen"| KOKORO --> PLAYER
+    TTS -->|"rejected on cost"| ELEVEN
+    PLAYER -->|"chosen"| NATIVE --> TRANSPORT
+    PLAYER -->|"not selected"| PWA
+    TRANSPORT -->|"chosen"| TAIL --> STREAM
+    TRANSPORT -->|"unnecessary"| CLOUD
+    STREAM -->|"chosen"| HLS --> AUDIO
+    STREAM -->|"ruled out"| CLIPS
+    AUDIO -->|"chosen"| NONMIX --> LANG
+    AUDIO -->|"rejected after v1"| DUCK
+    LANG --> GO --> PY --> DELIVERY
+    LANG -->|"replaced"| BASH
+    DELIVERY -->|"current"| WHOLE --> SENTENCE
+    DELIVERY -->|"rejected"| CAP
+    DELIVERY -->|"unavailable"| TOKEN
+
+    classDef context fill:#2b2d42,color:#ffffff,stroke:#8d99ae,stroke-width:2px
+    classDef accepted fill:#214e34,color:#ffffff,stroke:#6ede8a,stroke-width:2px
+    classDef rejected fill:#5b2333,color:#ffffff,stroke:#ef476f,stroke-width:2px
+    classDef decision fill:#3a506b,color:#ffffff,stroke:#5bc0be,stroke-width:2px
+    classDef deferred fill:#3d348b,color:#ffffff,stroke:#b8b8ff,stroke-width:2px
+
+    class NEED context
+    class BOUNDARY,EVENT,TTS,PLAYER,TRANSPORT,STREAM,AUDIO,LANG,DELIVERY decision
+    class REMOTE,HOOK,KOKORO,NATIVE,TAIL,HLS,NONMIX,GO,PY,WHOLE accepted
+    class FULL,SDK,ELEVEN,PWA,CLOUD,CLIPS,DUCK,BASH,CAP,TOKEN rejected
+    class SENTENCE deferred
