@@ -11,3 +11,8 @@ queue/
 .detached.log
 active
 speak-all
+channels.json
+selection.json
+spoken.jsonl
+.state.lock
+.bak/

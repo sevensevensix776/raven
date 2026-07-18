@@ -1,21 +1,82 @@
 #!/usr/bin/env python3
-"""Serves the HLS stream + page. Binds the tailnet so the phone can reach it.
+"""Serve Huginn's HLS stream and small tailnet control API."""
 
-Two things here are load-bearing:
-  - .m3u8 needs Cache-Control: no-store, or the player never sees new segments.
-  - A playlist GET *is* the listener heartbeat; writer.sh gates the queue on it.
-"""
+import contextlib
+import fcntl
+import hashlib
 import http.server
+import json
+import os
 import pathlib
-import socketserver
+import tempfile
+import urllib.parse
 
-ROOT = pathlib.Path.home() / "speech" / "hls"
+SPEECH = pathlib.Path.home() / "speech"
+ROOT = SPEECH / "hls"
 HB = ROOT / ".heartbeat"
+CHANNELS = SPEECH / "channels.json"
+SELECTION = SPEECH / "selection.json"
+SPOKEN = SPEECH / "spoken.jsonl"
+STATE_LOCK = SPEECH / ".state.lock"
+TAILSCALE_IP = os.environ.get("HUGINN_BIND", "100.64.0.1")
 
 
-class H(http.server.SimpleHTTPRequestHandler):
-    def __init__(self, *a, **k):
-        super().__init__(*a, directory=str(ROOT), **k)
+@contextlib.contextmanager
+def state_lock():
+    with STATE_LOCK.open("a+") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def read_json(path, default):
+    try:
+        return json.loads(path.read_text())
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return default
+
+
+def atomic_json(path, value):
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w") as handle:
+            json.dump(value, handle, separators=(",", ":"))
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+
+
+def selection_state():
+    return read_json(
+        SELECTION,
+        {"mode": "follow", "session_id": None, "follow_session_id": None},
+    )
+
+
+def transcript_lines(limit):
+    try:
+        raw_lines = SPOKEN.read_text().splitlines()[-limit:]
+    except OSError:
+        return []
+    result = []
+    for raw in raw_lines:
+        try:
+            result.append(json.loads(raw))
+        except json.JSONDecodeError:
+            continue
+    return result
+
+
+class HuginnHandler(http.server.SimpleHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=str(ROOT), **kwargs)
 
     def guess_type(self, path):
         if path.endswith(".m3u8"):
@@ -25,18 +86,110 @@ class H(http.server.SimpleHTTPRequestHandler):
         return super().guess_type(path)
 
     def end_headers(self):
-        if self.path.endswith(".m3u8"):
+        if urllib.parse.urlsplit(self.path).path.endswith(".m3u8"):
             self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
+    def json_response(self, payload, status=200, conditional=True):
+        body = json.dumps(payload, separators=(",", ":")).encode()
+        etag = '"' + hashlib.sha256(body).hexdigest()[:20] + '"'
+        if conditional and self.headers.get("If-None-Match") == etag:
+            self.send_response(304)
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            return
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("ETag", etag)
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
-        if self.path.endswith(".m3u8"):
+        parsed = urllib.parse.urlsplit(self.path)
+        if parsed.path == "/channels":
+            with state_lock():
+                channels = read_json(CHANNELS, [])
+                selection = selection_state()
+            channels.sort(key=lambda channel: channel.get("last_active_epoch", 0), reverse=True)
+            self.json_response({
+                "channels": channels,
+                "selection": {
+                    "mode": selection.get("mode", "follow"),
+                    "session_id": selection.get("session_id"),
+                },
+            })
+            return
+
+        if parsed.path == "/transcript":
+            query = urllib.parse.parse_qs(parsed.query)
+            try:
+                limit = max(1, min(100, int(query.get("limit", [50])[0])))
+            except ValueError:
+                limit = 50
+            self.json_response({"lines": transcript_lines(limit)})
+            return
+
+        if parsed.path.endswith(".m3u8"):
             HB.touch()
         super().do_GET()
 
-    def log_message(self, *a):
+    def do_POST(self):
+        if urllib.parse.urlsplit(self.path).path != "/active":
+            self.send_error(404)
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            self.send_error(400, "Invalid Content-Length")
+            return
+        if not 0 < length <= 4096:
+            self.send_error(413, "Body must be 1..4096 bytes")
+            return
+        try:
+            requested = json.loads(self.rfile.read(length))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self.send_error(400, "Invalid JSON")
+            return
+
+        mode = requested.get("mode")
+        session_id = requested.get("session_id")
+        if mode not in ("follow", "pinned"):
+            self.send_error(400, "mode must be follow or pinned")
+            return
+
+        with state_lock():
+            state = selection_state()
+            if mode == "pinned":
+                known = {
+                    channel.get("session_id")
+                    for channel in read_json(CHANNELS, [])
+                }
+                if not isinstance(session_id, str) or session_id not in known:
+                    self.send_error(400, "Unknown session_id")
+                    return
+                state["mode"] = "pinned"
+                state["session_id"] = session_id
+            else:
+                state["mode"] = "follow"
+                state["session_id"] = state.get("follow_session_id")
+            atomic_json(SELECTION, state)
+
+        self.json_response(
+            {"mode": state["mode"], "session_id": state.get("session_id")},
+            conditional=False,
+        )
+
+    def log_message(self, *_):
         pass
 
 
-socketserver.ThreadingTCPServer.allow_reuse_address = True
-socketserver.ThreadingTCPServer(("0.0.0.0", 8080), H).serve_forever()
+def main():
+    http.server.ThreadingHTTPServer.allow_reuse_address = True
+    http.server.ThreadingHTTPServer((TAILSCALE_IP, 8080), HuginnHandler).serve_forever()
+
+
+if __name__ == "__main__":
+    main()

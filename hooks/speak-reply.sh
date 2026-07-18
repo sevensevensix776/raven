@@ -1,72 +1,114 @@
 #!/bin/bash
-# Speaks Claude's replies into the live HLS stream (~/speech) for drive-time listening.
-#
-# Registered on TWO events, and behaves differently for each:
-#
-#   UserPromptSubmit -> records this session as the one you're talking to.
-#   Stop             -> speaks last_assistant_message, but ONLY if this session
-#                       is the one you last talked to.
-#
-# That's the channel selection: it follows you. Talk to a session from the phone
-# via Remote Control and narration switches to it, with nothing to tap in the car.
-#
-# HARD CONSTRAINT: hooks run with timeout=2. This must never do slow work.
-# It writes text and exits; ~/speech/writer.sh does the TTS and encoding.
-#
-# Bypass: `touch ~/speech/speak-all` to hear every session regardless of focus.
-
 set -uo pipefail
 
 SPEECH="$HOME/speech"
 Q="$SPEECH/queue"
-ACTIVE="$SPEECH/active"
+SELECTION="$SPEECH/selection.json"
 
-# If the stream isn't running, do nothing. Never block a turn.
 [ -d "$SPEECH" ] || exit 0
 mkdir -p "$Q" 2>/dev/null
-
 payload=$(cat)
 
 read -r event session cwd < <(
   printf '%s' "$payload" | python3 -c '
-import sys, json
+import json, sys
 try:
-    d = json.load(sys.stdin)
+    data = json.load(sys.stdin)
 except Exception:
-    print("- - -"); sys.exit(0)
-print(
-    d.get("hook_event_name") or "-",
-    d.get("session_id") or "-",
-    d.get("cwd") or "-",
-)
+    print("- - -"); raise SystemExit
+print(data.get("hook_event_name") or "-", data.get("session_id") or "-", data.get("cwd") or "-")
 ' 2>/dev/null
 )
 
+raw_text=$(printf '%s' "$payload" | python3 -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    value = data.get("last_assistant_message") or data.get("prompt") or ""
+    print(value)
+except Exception:
+    pass
+' 2>/dev/null)
+registry_line=$(printf '%s' "$raw_text" | tr '\n' ' ' | tr -s ' ' | head -c 180)
+
+# Registry and follow-mode state share one lock with server.py. A phone pin and
+# a UserPromptSubmit can no longer overwrite each other with torn mode/active files.
+python3 - "$SPEECH" "$event" "$session" "$cwd" "$registry_line" <<'PY' 2>/dev/null
+import fcntl, json, os, pathlib, sys, tempfile, time
+
+speech = pathlib.Path(sys.argv[1])
+event, session, cwd = sys.argv[2:5]
+last_line = sys.argv[5]
+channels_path = speech / "channels.json"
+selection_path = speech / "selection.json"
+
+def read(path, default):
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return default
+
+def write(path, value):
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    with os.fdopen(fd, "w") as handle:
+        json.dump(value, handle, separators=(",", ":"))
+        handle.flush(); os.fsync(handle.fileno())
+    os.replace(temporary, path)
+
+with (speech / ".state.lock").open("a+") as lock:
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    now = time.time()
+    state = read(selection_path, {
+        "mode": "follow", "session_id": None, "follow_session_id": None
+    })
+    channels = [
+        channel for channel in read(channels_path, [])
+        if channel.get("session_id") != session
+    ]
+    channels.append({
+        "session_id": session,
+        "project": pathlib.Path(cwd).name if cwd != "-" else "",
+        "last_active_epoch": now,
+        "last_line": last_line,
+    })
+    pinned = state.get("session_id") if state.get("mode") == "pinned" else None
+    cutoff = now - 24 * 60 * 60
+    channels = [
+        channel for channel in channels
+        if channel.get("last_active_epoch", 0) >= cutoff
+        or channel.get("session_id") == pinned
+    ]
+    channels.sort(key=lambda channel: channel.get("last_active_epoch", 0), reverse=True)
+    write(channels_path, channels[:50])
+
+    if event == "UserPromptSubmit":
+        state["follow_session_id"] = session
+        if state.get("mode", "follow") == "follow":
+            state["session_id"] = session
+        write(selection_path, state)
+PY
+
 case "$event" in
-  UserPromptSubmit)
-    printf '%s' "$session" > "$ACTIVE" 2>/dev/null
-    exit 0
-    ;;
+  UserPromptSubmit) exit 0 ;;
   Stop) ;;
   *) exit 0 ;;
 esac
 
-# Channel gate: only the session you last spoke to gets the stream.
-if [ ! -f "$SPEECH/speak-all" ] && [ -f "$ACTIVE" ]; then
-  [ "$session" = "$(cat "$ACTIVE" 2>/dev/null)" ] || exit 0
-fi
-
-text=$(printf '%s' "$payload" | python3 -c '
-import sys, json
+if [ ! -f "$SPEECH/speak-all" ]; then
+  selected=$(python3 - "$SELECTION" <<'PY' 2>/dev/null
+import json, pathlib, sys
 try:
-    print(json.load(sys.stdin).get("last_assistant_message") or "")
+    print(json.loads(pathlib.Path(sys.argv[1]).read_text()).get("session_id") or "")
 except Exception:
     pass
-' 2>/dev/null)
+PY
+)
+  [ -n "$selected" ] && [ "$session" = "$selected" ] || exit 0
+fi
 
+text="$raw_text"
 [ -z "${text// }" ] && exit 0
 
-# Strip fenced code, markdown punctuation, and bare paths — unspeakable aloud.
 clean=$(printf '%s' "$text" \
   | sed -e '/^[[:space:]]*```/,/^[[:space:]]*```/d' \
         -e 's/`[^`]*`/ /g' \
@@ -74,20 +116,27 @@ clean=$(printf '%s' "$text" \
         -e 's|/[A-Za-z0-9._/-]\{12,\}| that path |g' \
   | tr -s ' \n' ' ' \
   | head -c 700)
-
 [ -z "${clean// }" ] && exit 0
 
 project=$(basename "$cwd" 2>/dev/null)
-[ "$project" = "-" ] || [ -z "$project" ] && project=""
+if [ "$project" = "-" ] || [ -z "$project" ]; then project=""; fi
 
-# Drop TEXT, not audio. Synthesis happens in writer.sh.
-# Calling `say` here cost 1.4s against a 2s hook budget — a long reply would
-# blow the timeout and silently drop the speech. Writing text is ~10ms.
-#
-# mktemp + mv is load-bearing: writing straight into queue/ races writer.sh,
-# which would pick up a half-written file. mv within a filesystem is atomic.
-tmp=$(mktemp -t speak) || exit 0
-printf '%s' "${project:+In $project. }$clean" > "$tmp"
-mv "$tmp" "$Q/$(date +%s%N).txt" 2>/dev/null
-rm -f "$tmp" 2>/dev/null
+stamp=$(date +%s%N)
+text_tmp=$(mktemp "$Q/.text.XXXXXX") || exit 0
+meta_tmp=$(mktemp "$Q/.meta.XXXXXX") || { rm -f "$text_tmp"; exit 0; }
+printf '%s' "${project:+In $project. }$clean" > "$text_tmp"
+printf '%s' "$clean" | SESSION_ID="$session" PROJECT="$project" STAMP="$stamp" \
+  python3 -c '
+import json, os, sys
+json.dump({
+    "id": os.environ["STAMP"],
+    "session_id": os.environ["SESSION_ID"],
+    "project": os.environ["PROJECT"],
+    "text": sys.stdin.read(),
+}, sys.stdout, separators=(",", ":"))
+' > "$meta_tmp"
+
+# Metadata first; the .txt rename is the queue commit marker.
+mv "$meta_tmp" "$Q/$stamp.caption.json" && mv "$text_tmp" "$Q/$stamp.txt"
+rm -f "$text_tmp" "$meta_tmp" 2>/dev/null
 exit 0
