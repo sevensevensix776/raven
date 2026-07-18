@@ -1,5 +1,5 @@
-// Package config parses the shell config.sh the bash hook sourced, reading the
-// two knobs the hook cares about. Env vars override, matching bash ${VAR:-default}.
+// Package config parses the shell config.sh shared by Raven's components. Env
+// vars override, matching bash ${VAR:-default}.
 package config
 
 import (
@@ -13,10 +13,11 @@ import (
 type Config struct {
 	MaxSpokenChars  int     // 0 = unlimited
 	ChannelTTLHours float64 // idle-channel expiry backstop
+	IdleFloor       string  // noise (proven default) or silence
 }
 
 func Load(home string) Config {
-	cfg := Config{MaxSpokenChars: 0, ChannelTTLHours: 6}
+	cfg := Config{MaxSpokenChars: 0, ChannelTTLHours: 6, IdleFloor: "noise"}
 	vals := parseShell(filepath.Join(home, "config.sh"))
 
 	if v := pick("MAX_SPOKEN_CHARS", vals); v != "" {
@@ -28,6 +29,9 @@ func Load(home string) Config {
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			cfg.ChannelTTLHours = f
 		}
+	}
+	if v := pick("IDLE_FLOOR", vals); v != "" {
+		cfg.IdleFloor = v
 	}
 	return cfg
 }

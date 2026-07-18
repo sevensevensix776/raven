@@ -2,7 +2,7 @@
 
 Raven speaks Claude Code’s replies through an iPhone so a session can keep moving while its user is driving. This repository is the Go port of Raven’s Claude Code hook—the latency-sensitive front door that runs on every prompt and completed reply. The port is protected by a parity harness that drives the original Bash hook and the Go hook with the same events, then compares their state, transcript, log, and queue output; all five current scenarios pass. Go is a practical fit for the hook’s two-second execution budget: the compiled program starts in roughly 1 ms instead of paying Python’s roughly 50–100 ms interpreter-and-import cost on every turn, ships as one standard-library-only binary, avoids virtual environments and installed-versus-repository drift, and follows the same local-binary convention as `hermes`. The ML boundary stays where it belongs: `synthd` still uses Python, Kokoro, and `mlx-audio`, for which there is no useful Go binding.
 
-> **Current scope:** `raven hook` and `raven serve` are implemented. `write` and `diagnose` appear in the command usage but are not implemented yet.
+> **Current scope:** `raven hook`, `raven serve`, and `raven write` are implemented. `diagnose` appears in the command usage but is not implemented yet.
 
 ## Safety: parity before replacement
 
@@ -23,18 +23,20 @@ The project has no third-party Go dependencies; `go.mod` declares only the modul
 
 | Path | Responsibility |
 | --- | --- |
-| [`main.go`](./main.go) | CLI dispatch. Routes `raven hook` and `raven serve`. |
+| [`main.go`](./main.go) | CLI dispatch. Routes `raven hook`, `raven serve`, and `raven write`. |
 | [`internal/hook`](./internal/hook) | Reads Claude Code hook JSON from stdin, updates channel state, applies selection gating, cleans eligible replies, and commits queue files atomically. Resolves `RAVEN_HOME`, falling back to `~/speech`. |
 | [`internal/clean`](./internal/clean) | Pure-Go port of the Bash `sed`/`tr` speech-cleaning pipeline: removes fenced code, inline code, Markdown punctuation, and long paths; collapses whitespace; applies a byte cap. |
 | [`internal/state`](./internal/state) | Maintains `channels.json` and `selection.json` under `.state.lock`: follow/pin semantics, `SessionEnd` removal and unstick, TTL pruning, a 50-channel ceiling, and the last three replies per channel. Writes compact JSON through atomic renames. |
-| [`internal/config`](./internal/config) | Reads `MAX_SPOKEN_CHARS` and `CHANNEL_TTL_HOURS` from `~/speech/config.sh` (or the overridden Raven home), with non-empty environment variables taking precedence. |
+| [`internal/config`](./internal/config) | Reads `MAX_SPOKEN_CHARS`, `CHANNEL_TTL_HOURS`, and `IDLE_FLOOR` from `~/speech/config.sh` (or the overridden Raven home), with non-empty environment variables taking precedence. |
 | [`internal/rlog`](./internal/rlog) | Appends fail-soft, Python-compatible structured records to `logs/events.jsonl`. Each record is emitted with one append write. |
-| [`internal/transcript`](./internal/transcript) | Adds selected user prompts to `spoken.jsonl` as screen-only `role=user` entries. Serializes updates with `.transcript.lock`, writes atomically, and retains the last 200 lines. |
+| [`internal/transcript`](./internal/transcript) | Adds selected user prompts and emitted Claude captions to `spoken.jsonl`. Serializes updates with `.transcript.lock`, writes atomically, and retains the last 200 lines. |
 | [`internal/serve`](./internal/serve) | Serves `<home>/hls`, updates the listener heartbeat, and implements the phone JSON API with Python-compatible state locking, ETags, health data, selection writes, and phone logs. |
+| [`internal/write`](./internal/write) | Emits uninterrupted 24 kHz mono s16le PCM to stdout, gates queue consumption on listener heartbeat, drives ffmpeg pre-roll/idle/decoding, and provides the synthd-down `say` fallback. |
 | [`internal/hook/hook_test.go`](./internal/hook/hook_test.go) | Unit coverage for follow selection, queueing, channel gating, `SessionEnd`, and the non-null catch-up invariant. |
 | [`internal/clean/clean_test.go`](./internal/clean/clean_test.go) | Table-driven cleaning tests for code, Markdown, paths, whitespace, blank input, and byte caps. |
 | [`parity_test.py`](./parity_test.py) | Cross-language behavior harness for the installed Bash hook and the local Go binary. |
 | [`serve_parity_test.py`](./serve_parity_test.py) | Starts the Python and Go HTTP handlers against one seeded temporary home and compares control responses, conditional ETags, HLS headers, heartbeat, and log side effects. |
+| [`write_integration.sh`](./write_integration.sh) | Captures fixed-length PCM from Go and the current `writer.sh` in isolated homes, verifies both idle modes and speech RMS, and checks transcript/log/queue side effects. |
 
 ## Hook flow
 
@@ -91,6 +93,7 @@ go build -o raven .
 go test ./...
 python3 parity_test.py
 python3 serve_parity_test.py
+./write_integration.sh
 install -m 0755 raven ~/.local/bin/raven
 ```
 
@@ -120,11 +123,12 @@ RAVEN_HOME=/path/to/isolated/speech raven serve --addr 127.0.0.1:8081
 
 ### Configuration
 
-The hook recognizes two values from `$RAVEN_HOME/config.sh`, with a non-empty environment variable overriding the file:
+Raven recognizes three values from `$RAVEN_HOME/config.sh`, with a non-empty environment variable overriding the file:
 
 ```bash
 MAX_SPOKEN_CHARS=0   # byte cap; 0 means unlimited
 CHANNEL_TTL_HOURS=6  # idle-channel retention backstop
+IDLE_FLOOR=noise     # noise (proven) or silence between emitted clips
 ```
 
 This is intentionally a small `KEY=value` parser, not a shell interpreter.
@@ -171,22 +175,21 @@ Keep the existing `"timeout": 2`, save `~/.claude/settings.json`, and start a fr
 | Claude Code hook | Go: `raven hook` | Ported, installed, and parity-tested 5/5 |
 | Reply cleaning | Go: `internal/clean` | Ported and unit-tested; checked against the Bash pipeline |
 | Channel registry and selection | Go: `internal/state` | Ported; compatible with the Python writer and phone-side selection |
-| Event log and user transcript | Go: `internal/rlog`, `internal/transcript` | Ported in the hook path; output format remains compatible with Python consumers |
+| Event log and transcript | Go: `internal/rlog`, `internal/transcript` | Ported for hook and writer paths; output format remains compatible with Python consumers |
 | Speech synthesis | Python: `synthd`, Kokoro, `mlx-audio` | Intentionally stays Python |
 | HTTP server / phone surface | Go: `raven serve` | Ported and cross-language parity-tested; live cutover remains manual |
-| Writer orchestration | Existing Raven implementation | Not yet exposed as `raven write` |
+| Writer orchestration | Go: `raven write` | Ported, unit-tested, and PCM parity-tested against `writer.sh`; live cutover remains manual |
 | Diagnostics | Existing Raven tooling | `raven diagnose` is advertised but not implemented |
 
 ## Roadmap
 
-1. **`raven write`** — port writer orchestration and queue consumption, keeping `synthd` as the Python ML process.
-2. **`raven diagnose`** — consolidate health and state inspection once the serving and writing boundaries are stable.
+1. **`raven diagnose`** — consolidate health and state inspection once the serving and writing boundaries are stable.
 
 Each port should follow the hook’s migration rule: establish compatibility fixtures first, compare old and new behavior on the same inputs, then change the installed entry point while retaining a rollback path.
 
 ## Limits and deliberate tradeoffs
 
-- This repository is not a complete standalone Raven deployment. Today it supplies the Claude Code hook and HTTP server; the writer and Python synthesizer still complete the path to the phone.
+- This repository is not a complete standalone Raven deployment. Today it supplies the Claude Code hook, HTTP server, and PCM writer; the Python synthesizer and separate ffmpeg HLS encoder still complete the path to the phone.
 - The implementation uses Unix `flock` through `syscall`, so the state and transcript locking code is Unix-specific.
 - The hook is intentionally fail-silent. That protects Claude Code’s critical path, but operational failures must be diagnosed from Raven’s state, queue, and logs rather than hook stderr.
 - `RAVEN_HOME` must name an existing directory. Raven creates `queue/` and `logs/` beneath it, but a missing home causes an immediate no-op.

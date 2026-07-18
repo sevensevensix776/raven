@@ -1,6 +1,6 @@
-// Package transcript appends a user-prompt line to spoken.jsonl, matching
-// transcript_user.py: role=user, screen-only (never spoken), last-200 kept,
-// flocked on .transcript.lock so a prompt and a reply can't clobber the file.
+// Package transcript appends user and Claude lines to spoken.jsonl, matching
+// transcript_user.py and transcript_add.py. The last 200 lines are kept and
+// writes are flocked so prompts and replies cannot clobber one another.
 package transcript
 
 import (
@@ -31,6 +31,31 @@ func AddUser(home, session, project, text string) {
 		"role":            "user",
 		"spoken_at_epoch": float64(time.Now().UnixNano()) / 1e9,
 	}
+	appendEntry(home, entry)
+}
+
+// AddClaude reads a queued caption and records it when the writer starts
+// emitting the associated clip. Malformed or missing captions are ignored.
+func AddClaude(home, captionPath string) {
+	b, err := os.ReadFile(captionPath)
+	if err != nil {
+		return
+	}
+	var entry map[string]any
+	if json.Unmarshal(b, &entry) != nil {
+		return
+	}
+	if id, ok := entry["id"].(string); !ok || id == "" {
+		entry["id"] = strings.SplitN(filepath.Base(captionPath), ".", 2)[0]
+	}
+	entry["spoken_at_epoch"] = float64(time.Now().UnixNano()) / 1e9
+	if _, ok := entry["role"]; !ok {
+		entry["role"] = "claude"
+	}
+	appendEntry(home, entry)
+}
+
+func appendEntry(home string, entry map[string]any) {
 	line, err := json.Marshal(entry)
 	if err != nil {
 		return
