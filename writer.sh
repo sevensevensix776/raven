@@ -19,14 +19,23 @@ while true; do
   fi
 
   # Drop stale replies — don't read 20-minute-old news on reconnect.
-  find queue \( -name '*.txt' -o -name '*.aiff' \) -mmin +10 -delete 2>/dev/null
+  find queue \( -name '*.txt' -o -name '*.aiff' -o -name '*.wav' \) -mmin +10 -delete 2>/dev/null
 
-  f=$(ls -1 queue/*.txt queue/*.aiff 2>/dev/null | head -1)
+  # synthd (warm Kokoro) turns queued *.txt into ready *.wav/*.aiff. Consume the
+  # ready audio, oldest first (timestamp-named). Fall back to say-ing a *.txt
+  # ourselves ONLY if it has waited >5s — meaning synthd is down. Never silent.
+  f=$(ls -1 queue/*.wav queue/*.aiff 2>/dev/null | head -1)
+  if [ -z "$f" ]; then
+    t=$(ls -1 queue/*.txt 2>/dev/null | head -1)
+    if [ -n "$t" ]; then
+      age=$(( $(date +%s) - $(stat -f %m "$t") ))
+      [ "$age" -ge 5 ] && f="$t"
+    fi
+  fi
 
   if [ "$live" = "1" ] && [ -n "$f" ]; then
-    # Synthesis lives here, not in the hook: the hook has a 2s budget and
-    # `say` on a long reply blows it. Here it can take as long as it needs.
     if [ "${f##*.}" = "txt" ]; then
+      # Fallback path: synthd isn't running. `say` inline so we still speak.
       a=$(mktemp -t spk)
       if say -o "$a.aiff" "$(cat "$f")" 2>/dev/null; then
         ffmpeg -loglevel quiet -i "$a.aiff" -f s16le -ar 24000 -ac 1 -acodec pcm_s16le -

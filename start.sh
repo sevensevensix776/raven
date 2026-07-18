@@ -28,4 +28,8 @@ python3 spawn.py .ffmpeg.pid ffmpeg -re -f s16le -ar 24000 -ac 1 -i pcm.fifo \
 
 python3 spawn.py .server.pid python3 server.py
 
+# synthd: warm Kokoro synthesis daemon (keeps the model loaded → ~0.1s/reply).
+# Uses the venv python that has mlx-audio + misaki installed.
+python3 spawn.py .synthd.pid "$HOME/speech/.venv/bin/python" synthd.py
+
 sleep 4
