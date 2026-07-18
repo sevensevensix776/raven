@@ -6,6 +6,8 @@ import UIKit
 final class PlaybackController: NSObject, ObservableObject {
     @Published private(set) var statusText = "Ready"
     @Published private(set) var startButtonEnabled = true
+    @Published private(set) var isLive = false
+    @Published private(set) var isMuted = false
 
     private let streamURL = URL(string: "http://100.64.0.1:8080/stream.m3u8")!
     private let session = AVAudioSession.sharedInstance()
@@ -65,6 +67,15 @@ final class PlaybackController: NSObject, ObservableObject {
         }
     }
 
+    func toggleMute() {
+        runOnMain { [weak self] in
+            guard let self else { return }
+            self.isMuted.toggle()
+            self.player?.isMuted = self.isMuted
+            self.log("MUTE_CHANGED muted=\(self.isMuted)")
+        }
+    }
+
     private func rebuildPlayer(reason: String) {
         dispatchPrecondition(condition: .onQueue(.main))
         guard wantsPlayback, !isInterrupted else { return }
@@ -89,6 +100,7 @@ final class PlaybackController: NSObject, ObservableObject {
         newItem.preferredForwardBufferDuration = 0
         let newPlayer = AVPlayer(playerItem: newItem)
         newPlayer.automaticallyWaitsToMinimizeStalling = true
+        newPlayer.isMuted = isMuted
 
         item = newItem
         player = newPlayer
@@ -104,8 +116,8 @@ final class PlaybackController: NSObject, ObservableObject {
         // makes us the Now Playing app (per WWDC19/501: one remote command + a
         // non-mixable session), which is what routes to CarPlay and lights up the
         // steering-wheel controls. Cost: starting Spotify takes the session from us.
-        // Do NOT add .duckOthers here — combined with this stream's continuous comfort
-        // noise it ducks the driver's audio for the entire drive. That killed v1.
+        // Do NOT add .duckOthers here. Huginn owns the route while its live stream is
+        // playing; ducking would suppress the driver's other audio for the whole drive.
         try session.setCategory(.playback, mode: .default, options: [])
         if #available(iOS 17.0, *) {
             // This product deliberately follows CarPlay onto the next route instead of pausing on disconnect.
@@ -210,6 +222,7 @@ final class PlaybackController: NSObject, ObservableObject {
 
         switch observedPlayer.timeControlStatus {
         case .playing:
+            isLive = true
             hasStartedPlayingCurrentItem = true
             cancelRetry()
             cancelStallWatchdog()
@@ -220,6 +233,7 @@ final class PlaybackController: NSObject, ObservableObject {
             updateNowPlaying(rate: 1)
             log("PLAYING_OBSERVED route=\(quoted(routeDescription()))")
         case .waitingToPlayAtSpecifiedRate:
+            isLive = false
             healthySinceUptime = nil
             let reason = observedPlayer.reasonForWaitingToPlay?.rawValue ?? "unknown"
             setStatus("Waiting for stream")
@@ -227,6 +241,7 @@ final class PlaybackController: NSObject, ObservableObject {
             log("WAITING_OBSERVED reason=\(quoted(reason))")
             armStallWatchdog(reason: "player waiting")
         case .paused:
+            isLive = false
             healthySinceUptime = nil
             updateNowPlaying(rate: 0)
             if isInterrupted {
@@ -332,6 +347,7 @@ final class PlaybackController: NSObject, ObservableObject {
     }
 
     private func removePlayer() {
+        isLive = false
         playerStatusObservation?.invalidate()
         itemStatusObservation?.invalidate()
         keepUpObservation?.invalidate()
