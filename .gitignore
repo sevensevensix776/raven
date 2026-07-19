@@ -18,3 +18,5 @@ spoken.jsonl
 .bak/
 logs/
 .transcript.lock
+tail-state/
+.tail.pid
