@@ -19,8 +19,12 @@ The installed binary at this checkpoint:
 - `~/.local/bin/raven` sha256 `e994d2272cacd898a6ac2ebbd93e92707a2326bcada28424f1895704a2a4d04d`
 - built from raven-go `cd4e5e3`.
 
-> **These repos have no git remotes** — the tag is a *local* anchor and the git
-> history is the only backup. Rollback below is fully local and needs no network.
+> **Off-machine backup:** all three repos are pushed to **private** GitHub repos
+> under the `sevensevensix776` org — `raven`, `raven-go`, `ear` — via SSH
+> (`git@github.com:sevensevensix776/<name>.git`), and the
+> `checkpoint-pre-live-narration` tag is on each remote (verified: remote SHAs ==
+> local). Rollback below is fully local and needs no network, but if the machine
+> is lost you can re-clone from GitHub and `git checkout` the tag.
 
 ## Known-good baseline (what "healthy" looks like)
 
