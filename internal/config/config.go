@@ -14,11 +14,16 @@ type Config struct {
 	MaxSpokenChars  int     // 0 = unlimited
 	ChannelTTLHours float64 // idle-channel expiry backstop
 	IdleFloor       string  // noise (proven default) or silence
+	LiveNarration   bool    // tail speaks completed blocks mid-turn; default off (Phase B gate)
 }
 
 func Load(home string) Config {
 	cfg := Config{MaxSpokenChars: 0, ChannelTTLHours: 6, IdleFloor: "noise"}
 	vals := parseShell(filepath.Join(home, "config.sh"))
+
+	if v := pick("LIVE_NARRATION", vals); v == "1" || strings.EqualFold(v, "true") {
+		cfg.LiveNarration = true
+	}
 
 	if v := pick("MAX_SPOKEN_CHARS", vals); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {

@@ -17,12 +17,13 @@ import (
 	"raven-go/internal/diagnose"
 	"raven-go/internal/hook"
 	"raven-go/internal/serve"
+	"raven-go/internal/tail"
 	"raven-go/internal/write"
 )
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: raven <hook|serve|write|diagnose>")
+		fmt.Fprintln(os.Stderr, "usage: raven <hook|serve|write|diagnose|tail>")
 		os.Exit(2)
 	}
 	switch os.Args[1] {
@@ -41,6 +42,11 @@ func main() {
 	case "diagnose":
 		if err := diagnose.Run(os.Args[2:], os.Stdout); err != nil {
 			fmt.Fprintf(os.Stderr, "raven diagnose: %v\n", err)
+			os.Exit(1)
+		}
+	case "tail":
+		if err := tail.Run(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "raven tail: %v\n", err)
 			os.Exit(1)
 		}
 	default:
