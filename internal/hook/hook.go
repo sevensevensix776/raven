@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"raven-go/internal/clean"
@@ -112,6 +113,18 @@ func Run(stdin io.Reader) {
 		}
 	}
 
+	// Live narration: when on and the tailer is alive, it enqueues every completed
+	// block straight from the transcript — including this final one — so the Stop
+	// hook must not also enqueue it or the driver hears the conclusion twice. If
+	// the tailer is down, fall through and speak the final block ourselves (the
+	// safety net that preserves today's behavior).
+	if cfg.LiveNarration && tailerAlive(home) {
+		rlog.Log(home, "hook", "stop_yield_to_tailer", map[string]any{
+			"session": session, "project": projectName(cwd),
+		})
+		return
+	}
+
 	if clean.IsBlank(rawText) {
 		return
 	}
@@ -158,6 +171,25 @@ func dashDefault(s string) string {
 func speakAll(home string) bool {
 	_, err := os.Stat(filepath.Join(home, "speak-all"))
 	return err == nil
+}
+
+// tailerAlive reports whether the live-narration tailer is running, via its
+// pidfile and a signal-0 liveness probe (same semantics as `kill -0`). Used by
+// the Stop hook to decide whether to yield final-block speech to the tailer.
+func tailerAlive(home string) bool {
+	b, err := os.ReadFile(filepath.Join(home, ".tail.pid"))
+	if err != nil {
+		return false
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil || pid <= 0 {
+		return false
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	return proc.Signal(syscall.Signal(0)) == nil
 }
 
 // isSystemInjected reports whether a UserPromptSubmit prompt is actually a

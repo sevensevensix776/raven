@@ -1,9 +1,14 @@
-// Command entry for `raven tail`: the long-lived transcript tailer that (later)
-// speaks completed assistant text blocks during a turn. Phase A is SHADOW ONLY —
-// it logs what it would enqueue and never commits to the speech queue, so it
-// cannot disturb the live stream. It reads the selected session's transcript,
+// Command entry for `raven tail`: the long-lived transcript tailer that speaks
+// completed assistant text blocks during a turn — before the Stop hook fires —
+// so multi-step turns aren't silent. It reads the selected session's transcript,
 // tracks a durable per-session cursor + bounded seen-set, and respects channel
-// selection. Enqueue + Stop coordination land in Phase B behind LIVE_NARRATION=1.
+// selection.
+//
+// Gated by LIVE_NARRATION (config.sh): when off, it only shadow-logs and never
+// touches the queue. When on, it enqueues each completed block through the same
+// caption+.txt commit protocol the hook uses, and the Stop hook yields to it (so
+// the final block isn't spoken twice). If the tailer is down, the Stop hook
+// falls back to speaking the final block itself.
 package tail
 
 import (
@@ -18,11 +23,22 @@ import (
 	"syscall"
 	"time"
 
+	"raven-go/internal/clean"
 	"raven-go/internal/config"
 	"raven-go/internal/hook"
 	"raven-go/internal/rlog"
 	"raven-go/internal/state"
 )
+
+// caption mirrors the hook's queue caption so the phone transcript renders live-
+// narrated blocks identically to Stop-hook replies.
+type caption struct {
+	ID        string `json:"id"`
+	SessionID string `json:"session_id"`
+	Project   string `json:"project"`
+	Text      string `json:"text"`
+	Display   string `json:"display"`
+}
 
 // cursor is the durable per-session tail state (tail-state/<session>.json). The
 // byte offset handles normal append progress; the seen-set handles restarts and
@@ -69,12 +85,13 @@ func Run(args []string) error {
 		go func() { <-sig; os.Remove(pidPath); os.Exit(0) }()
 	}
 
-	// Phase A is shadow-only: the enqueue path is not implemented yet, so the
-	// tailer never speaks even if LIVE_NARRATION=1. The flag is logged for
-	// visibility; it gates enqueue in Phase B.
+	mode := "shadow"
+	if config.Load(home).LiveNarration {
+		mode = "live"
+	}
+	_ = os.MkdirAll(filepath.Join(home, "queue"), 0o755)
 	rlog.Log(home, "tail", "start", map[string]any{
-		"shadow": true, "interval_ms": *interval, "replay": *replay,
-		"live_narration_flag": config.Load(home).LiveNarration,
+		"mode": mode, "interval_ms": *interval, "replay": *replay,
 	})
 	for {
 		r.pass()
@@ -88,7 +105,7 @@ func Run(args []string) error {
 // pass runs one poll: resolve the selected session, advance its cursor over any
 // newly-appended complete lines, and (shadow) log the eligible blocks.
 func (r *runner) pass() {
-	session, path := selectedTarget(r.home)
+	session, path, project := selectedTarget(r.home)
 	if session == "" || path == "" {
 		return
 	}
@@ -138,12 +155,25 @@ func (r *runner) pass() {
 		return // only an unterminated line so far; wait for it to complete
 	}
 	for _, b := range blocks {
-		// SHADOW: log what we WOULD speak. Phase A never enqueues.
-		rlog.Log(r.home, "tail", "shadow_block", map[string]any{
-			"session": session, "uuid": b.UUID, "index": b.Index,
-			"key": short(b.Key), "text_hash": short(b.TextHash),
-			"chars": len(b.Cleaned), "preview": preview(b.Cleaned, 80), "ts": b.Timestamp,
-		})
+		if cfg.LiveNarration {
+			if enqueueBlock(r.home, session, project, b) {
+				rlog.Log(r.home, "tail", "narrated", map[string]any{
+					"session": session, "uuid": b.UUID, "index": b.Index,
+					"chars": len(b.Cleaned), "preview": preview(b.Cleaned, 80),
+				})
+			} else {
+				// Selection changed at commit time (or a rare write failure): don't
+				// speak into the wrong channel. Mark seen anyway — we never backfill
+				// a block on re-selection.
+				rlog.Log(r.home, "tail", "narrate_skip", map[string]any{"session": session, "uuid": b.UUID})
+			}
+		} else {
+			rlog.Log(r.home, "tail", "shadow_block", map[string]any{
+				"session": session, "uuid": b.UUID, "index": b.Index,
+				"key": short(b.Key), "text_hash": short(b.TextHash),
+				"chars": len(b.Cleaned), "preview": preview(b.Cleaned, 80), "ts": b.Timestamp,
+			})
+		}
 		cur.Seen = append(cur.Seen, b.Key)
 	}
 	cur.Offset += consumed
@@ -153,22 +183,59 @@ func (r *runner) pass() {
 	saveCursor(r.home, session, cur)
 }
 
-// selectedTarget returns the currently-selected session and its transcript path,
-// read together under the state lock so selection and channel metadata agree.
-func selectedTarget(home string) (session, path string) {
+// selectedTarget returns the currently-selected session, its transcript path,
+// and project, read together under the state lock so selection and channel
+// metadata agree.
+func selectedTarget(home string) (session, path, project string) {
 	if unlock, err := state.Lock(home); err == nil {
 		defer unlock()
 	}
 	session = state.SelectedSession(home)
 	if session == "" {
-		return "", ""
+		return "", "", ""
 	}
 	for _, c := range state.ReadChannels(home) {
 		if c.SessionID == session {
-			return session, c.TranscriptPath
+			return session, c.TranscriptPath, c.Project
 		}
 	}
-	return session, "" // selected but no known transcript path yet
+	return session, "", "" // selected but no known transcript path yet
+}
+
+// enqueueBlock commits one block to the speech queue exactly like the hook does:
+// metadata first, then the .txt rename as the commit marker. It re-checks the
+// selection under the state lock immediately before committing so a block is
+// never spoken into a channel that was deselected mid-poll. Returns false if the
+// session is no longer selected or the write fails.
+func enqueueBlock(home, session, project string, b Block) bool {
+	unlock, err := state.Lock(home)
+	if err == nil {
+		defer unlock()
+	}
+	if state.SelectedSession(home) != session {
+		return false
+	}
+	stamp := strconv.FormatInt(time.Now().UnixNano(), 10)
+	// No "In <project>." prefix: continuous mid-turn narration would repeat it on
+	// every block, which is grating on a drive. Project still rides in the caption
+	// for the phone transcript. (Tunable after the first drive.)
+	spoken := b.Cleaned
+	meta, err := json.Marshal(caption{
+		ID: stamp, SessionID: session, Project: project,
+		Text: b.Cleaned, Display: clean.Display(b.Raw),
+	})
+	if err != nil {
+		return false
+	}
+	q := filepath.Join(home, "queue")
+	if !writeAtomic(filepath.Join(q, stamp+".caption.json"), meta) {
+		return false
+	}
+	if !writeAtomic(filepath.Join(q, stamp+".txt"), []byte(spoken)) {
+		os.Remove(filepath.Join(q, stamp+".caption.json"))
+		return false
+	}
+	return true
 }
 
 func devIno(fi os.FileInfo) (dev, ino uint64) {
@@ -202,22 +269,24 @@ func saveCursor(home, session string, c *cursor) {
 	writeAtomic(cursorPath(home, session), b)
 }
 
-func writeAtomic(path string, data []byte) {
+func writeAtomic(path string, data []byte) bool {
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".tmp.*")
 	if err != nil {
-		return
+		return false
 	}
 	name := tmp.Name()
 	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
 		os.Remove(name)
-		return
+		return false
 	}
 	tmp.Sync()
 	tmp.Close()
 	if os.Rename(name, path) != nil {
 		os.Remove(name)
+		return false
 	}
+	return true
 }
 
 func sliceToSet(keys []string) map[string]struct{} {
