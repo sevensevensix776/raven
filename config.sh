@@ -15,6 +15,13 @@ SAY_VOICE=Samantha
 SUMMARIZE=0
 SUMMARY_MODEL=qwen3:1.7b
 
+# Live narration: speak completed assistant text blocks DURING a turn (before the
+# Stop hook), so multi-step turns aren't silent. When 1, the `raven tail` process
+# owns speech for the selected channel and the Stop hook yields to it; when 0,
+# reverts instantly to speak-on-Stop only. This is the kill switch — flip to 0
+# and restart (or just stop the tailer) to fully revert.
+LIVE_NARRATION=1
+
 # Between replies: noise = proven low floor that keeps the app alive;
 # silence = true digital silence (kills the static) — GATED on a device test.
 IDLE_FLOOR=noise

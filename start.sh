@@ -37,4 +37,9 @@ python3 spawn.py .server.pid "$HOME/.local/bin/raven" serve
 # Uses the venv python that has mlx-audio + misaki installed.
 python3 spawn.py .synthd.pid "$RAVEN_HOME/.venv/bin/python" synthd.py
 
+# tail: live-narration transcript tailer — speaks completed assistant text blocks
+# mid-turn (before the Stop hook). Gated by LIVE_NARRATION in config.sh; when off
+# it only shadow-logs and never touches the queue.
+python3 spawn.py .tail.pid "$HOME/.local/bin/raven" tail
+
 sleep 4
