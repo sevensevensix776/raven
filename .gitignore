@@ -13,6 +13,7 @@ active
 speak-all
 channels.json
 selection.json
+watermarks.json
 spoken.jsonl
 .state.lock
 .bak/
