@@ -6,7 +6,7 @@ Accepted.
 
 ## Context
 
-Raven is a personal native iPhone client and needs repeatable on-device builds without making the Xcode GUI part of the operating procedure. Xcode still supplies the compiler and SDK. Signing uses an existing App Store Connect API key and the paid 776 development team. Free personal Apple IDs cannot create App Store Connect API keys, so they could not support this workflow.
+Raven is a personal native iPhone client and needs repeatable on-device builds without making the Xcode GUI part of the operating procedure. Xcode still supplies the compiler and SDK. Signing uses an existing App Store Connect API key issued under a paid Apple Developer Program membership. Free personal Apple IDs cannot create App Store Connect API keys, so they could not support this workflow.
 
 The project also exposed a separate macOS code-signing deployment trap: copying the live Go `raven` executable over itself while long-lived processes had it memory-mapped invalidated its Mach-O signature. New hook executions received SIGKILL, exit 137. Although that failure involved the Mac binary rather than the iOS app, it established the same operational rule: an install is not complete until the installed artifact remains valid for a new signed execution.
 

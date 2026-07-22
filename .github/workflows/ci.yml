@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    # macOS is the platform Raven targets. The code cross-compiles to Linux, but
+    # the tests exercise flock and filesystem semantics on the real target.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: cli/go.sum
+
+      - name: gofmt
+        working-directory: cli
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt found unformatted files:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Build
+        working-directory: cli
+        run: go build ./...
+
+      - name: Vet
+        working-directory: cli
+        run: go vet ./...
+
+      - name: Test
+        working-directory: cli
+        run: go test ./...
+
+      - name: No third-party dependencies
+        working-directory: cli
+        # go.mod must declare only the module and the Go version. This is a
+        # deliberate property of the project, not an accident worth drifting on.
+        run: |
+          if grep -qE '^\s*require' go.mod; then
+            echo "::error::go.mod gained a dependency; Raven's CLI is intentionally dependency-free"
+            grep -nE '^\s*require' go.mod
+            exit 1
+          fi
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Markdown links resolve
+        shell: bash
+        # Local-file links only, so this is deterministic and needs no network.
+        # Documentation rot is this repository's most common regression: a single
+        # pass fixed roughly fifteen stale or broken links, and nothing prevented
+        # them. Anchors are stripped before the existence check.
+        run: |
+          rc=0
+          while IFS= read -r file; do
+            dir="$(dirname "$file")"
+            bad="$(grep -ohE '\]\([^)#][^)]*\)' "$file" 2>/dev/null \
+              | sed 's/^](//; s/)$//' \
+              | grep -vE '^(https?|mailto):' \
+              | while IFS= read -r link; do
+                  target="${link%%#*}"
+                  [ -z "$target" ] && continue
+                  [ -e "$dir/$target" ] || echo "$link"
+                done)"
+            if [ -n "$bad" ]; then
+              while IFS= read -r link; do
+                echo "::error file=$file::broken link -> $link"
+              done <<< "$bad"
+              rc=1
+            fi
+          done < <(git ls-files '*.md')
+          exit $rc

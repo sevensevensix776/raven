@@ -12,7 +12,7 @@ func TestReply(t *testing.T) {
 		{"plain", "Tests pass and the deploy is green.", 0, "Tests pass and the deploy is green."},
 		{"inline code", "Run `yarn build` now.", 0, "Run now."},
 		{"markdown punct", "**Bold** and _italic_ and # head", 0, "Bold and italic and head"},
-		{"long path", "Edit /Users/asif/code/experiments/thing.go please", 0, "Edit that path please"},
+		{"long path", "Edit /Users/you/code/experiments/thing.go please", 0, "Edit that path please"},
 		{"short path kept", "see /a/b here", 0, "see /a/b here"},
 		{"newlines collapse", "line one\n\nline two", 0, "line one line two"},
 		{

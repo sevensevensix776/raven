@@ -97,7 +97,7 @@ Transport stayed private and local. Both devices were already on the same Tailsc
 
 ## Phase 5 — Real use shaped the product
 
-The iOS target retained the internal name `Ear`, while the display name became Raven. Its raven icon was generated with `gpt-image`. The app was built, signed, installed, and launched entirely from the CLI using `xcodebuild`, `codesign`, and `xcrun devicectl`; Xcode supplied the toolchain but the GUI was not part of the workflow. An existing App Store Connect API key was reused. Free personal Apple IDs cannot create such keys, so the paid 776 development team was required. See [ADR 0008](adr/0008-cli-ios-build.md).
+The iOS target retained the internal name `Ear`, while the display name became Raven. Its raven icon was generated with `gpt-image`. The app was built, signed, installed, and launched entirely from the CLI using `xcodebuild`, `codesign`, and `xcrun devicectl`; Xcode supplied the toolchain but the GUI was not part of the workflow. An existing App Store Connect API key was reused. Free personal Apple IDs cannot create such keys, so a paid Apple Developer Program membership was required. See [ADR 0008](adr/0008-cli-ios-build.md).
 
 Features accumulated from actual use rather than from a speculative voice-assistant roadmap:
 

@@ -60,7 +60,7 @@ func TestCaptionKeepsSpokenTextAndAddsReadableDisplay(t *testing.T) {
 	fire(t, map[string]any{
 		"hook_event_name": "UserPromptSubmit", "session_id": "A", "cwd": "/x/raven-go", "prompt": "make it readable",
 	})
-	reply := "Done.\n\n- Updated **the parser** at `/Users/asif/code/experiments/raven-go/main.go`.\n```go\nfmt.Println(\"noise\")\n```\n\nTests pass."
+	reply := "Done.\n\n- Updated **the parser** at `/Users/you/code/experiments/raven-go/main.go`.\n```go\nfmt.Println(\"noise\")\n```\n\nTests pass."
 	fire(t, map[string]any{
 		"hook_event_name": "Stop", "session_id": "A", "cwd": "/x/raven-go", "last_assistant_message": reply,
 	})
@@ -74,7 +74,7 @@ func TestCaptionKeepsSpokenTextAndAddsReadableDisplay(t *testing.T) {
 	if got.Text != "Done. - Updated the parser at . Tests pass." {
 		t.Fatalf("spoken caption text changed: %q", got.Text)
 	}
-	wantDisplay := "Done.\n\n- Updated **the parser** at `/Users/asif/code/experiments/raven-go/main.go`.\n[code]\n\nTests pass."
+	wantDisplay := "Done.\n\n- Updated **the parser** at `/Users/you/code/experiments/raven-go/main.go`.\n[code]\n\nTests pass."
 	if got.Display != wantDisplay {
 		t.Fatalf("display caption\n got %q\nwant %q", got.Display, wantDisplay)
 	}
