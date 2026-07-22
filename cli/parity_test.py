@@ -24,17 +24,17 @@ HELPERS = ["ravenlog.py", "transcript_user.py", "transcript_add.py"]
 # (name, initial_state, payloads[])  — payloads run in sequence against one dir.
 CASES = [
     ("follow_sets_active_and_speaks", {}, [
-        {"hook_event_name": "UserPromptSubmit", "session_id": "A", "cwd": "/Users/x/code/cerebro-api", "prompt": "Fix the migration please"},
-        {"hook_event_name": "Stop", "session_id": "A", "cwd": "/Users/x/code/cerebro-api", "last_assistant_message": "Done. The migration is applied and tests pass."},
+        {"hook_event_name": "UserPromptSubmit", "session_id": "A", "cwd": "/Users/x/code/demo-app", "prompt": "Fix the migration please"},
+        {"hook_event_name": "Stop", "session_id": "A", "cwd": "/Users/x/code/demo-app", "last_assistant_message": "Done. The migration is applied and tests pass."},
     ]),
-    ("stop_non_selected_gate_skips", {"selection.json": {"mode": "pinned", "session_id": "A", "follow_session_id": "A"}, "channels.json": [{"session_id": "A", "project": "cerebro-api", "last_active_epoch": 1.0, "last_line": "", "recent": []}]}, [
+    ("stop_non_selected_gate_skips", {"selection.json": {"mode": "pinned", "session_id": "A", "follow_session_id": "A"}, "channels.json": [{"session_id": "A", "project": "demo-app", "last_active_epoch": 1.0, "last_line": "", "recent": []}]}, [
         {"hook_event_name": "Stop", "session_id": "B", "cwd": "/x/forge", "last_assistant_message": "This should be gated out and not queued."},
     ]),
     ("session_end_removes_and_unsticks", {"selection.json": {"mode": "pinned", "session_id": "Y", "follow_session_id": "X"}, "channels.json": [{"session_id": "Y", "project": "forge", "last_active_epoch": 9e12, "last_line": "", "recent": []}, {"session_id": "X", "project": "api", "last_active_epoch": 9e12, "last_line": "", "recent": []}]}, [
         {"hook_event_name": "SessionEnd", "session_id": "Y", "cwd": "/x/forge", "reason": "clear"},
     ]),
-    ("code_and_paths_cleaned", {"selection.json": {"mode": "pinned", "session_id": "A", "follow_session_id": "A"}, "channels.json": [{"session_id": "A", "project": "cerebro-api", "last_active_epoch": 9e12, "last_line": "", "recent": []}]}, [
-        {"hook_event_name": "Stop", "session_id": "A", "cwd": "/Users/x/code/cerebro-api", "last_assistant_message": "Edit /Users/x/code/experiments/thing.go and run `yarn build`.\n```go\nfmt.Println(1)\n```\n**Done**."},
+    ("code_and_paths_cleaned", {"selection.json": {"mode": "pinned", "session_id": "A", "follow_session_id": "A"}, "channels.json": [{"session_id": "A", "project": "demo-app", "last_active_epoch": 9e12, "last_line": "", "recent": []}]}, [
+        {"hook_event_name": "Stop", "session_id": "A", "cwd": "/Users/x/code/demo-app", "last_assistant_message": "Edit /Users/x/code/experiments/thing.go and run `yarn build`.\n```go\nfmt.Println(1)\n```\n**Done**."},
     ]),
     ("recent_accumulates_three", {"selection.json": {"mode": "pinned", "session_id": "A", "follow_session_id": "A"}, "channels.json": [{"session_id": "A", "project": "api", "last_active_epoch": 9e12, "last_line": "", "recent": []}]}, [
         {"hook_event_name": "Stop", "session_id": "A", "cwd": "/x/api", "last_assistant_message": "First reply about reading the schema."},

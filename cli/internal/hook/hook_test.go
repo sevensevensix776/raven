@@ -37,8 +37,8 @@ func readJSON(t *testing.T, path string, v any) {
 
 func TestFollowActivatesAndQueues(t *testing.T) {
 	dir := setup(t)
-	fire(t, map[string]any{"hook_event_name": "UserPromptSubmit", "session_id": "A", "cwd": "/x/cerebro-api", "prompt": "fix it"})
-	fire(t, map[string]any{"hook_event_name": "Stop", "session_id": "A", "cwd": "/x/cerebro-api", "last_assistant_message": "Done, tests pass."})
+	fire(t, map[string]any{"hook_event_name": "UserPromptSubmit", "session_id": "A", "cwd": "/x/demo-app", "prompt": "fix it"})
+	fire(t, map[string]any{"hook_event_name": "Stop", "session_id": "A", "cwd": "/x/demo-app", "last_assistant_message": "Done, tests pass."})
 
 	var sel map[string]any
 	readJSON(t, filepath.Join(dir, "selection.json"), &sel)
@@ -50,7 +50,7 @@ func TestFollowActivatesAndQueues(t *testing.T) {
 		t.Fatalf("expected 1 queued .txt, got %d", len(txts))
 	}
 	body, _ := os.ReadFile(txts[0])
-	if !strings.Contains(string(body), "In cerebro-api. Done, tests pass.") {
+	if !strings.Contains(string(body), "In demo-app. Done, tests pass.") {
 		t.Errorf("queued text wrong: %q", body)
 	}
 }
