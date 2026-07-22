@@ -1,0 +1,7 @@
+build/
+DerivedData/
+*.xcuserdatad
+xcuserdata/
+.DS_Store
+EarPlayback.log
+mac/
