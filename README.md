@@ -14,6 +14,17 @@ Raven is a voice-out companion for Claude Code: it turns the selected Claude ses
 
 The product and iPhone display name are **Raven**. A few implementation names still say `Huginn` or `Ear`; those are retained internal names, not separate systems.
 
+## Repository layout
+
+Raven is one product in three parts, kept in a single repo. Each part kept its full history through the merge into this monorepo.
+
+| Path | What it is |
+| --- | --- |
+| `/` (root) | **The Mac runtime** — the always-on pipeline: the `synthd` Kokoro daemon, `start.sh` / `stop.sh`, `config.sh`, and the shell/Python glue. `RAVEN_HOME` points here. |
+| [`cli/`](cli/) | **The `raven` Go binary** — the Claude Code hook, the HLS + control server, the PCM writer, the live-narration transcript tailer, and diagnostics. Built and installed to `~/.local/bin/raven` via [`cli/install.sh`](cli/install.sh). |
+| [`ios/`](ios/) | **The iPhone app** (SwiftUI; internal name *Ear*) — a background HLS player with Now Playing and CarPlay controls. |
+| [`docs/`](docs/) | Architecture, ADRs, the drive log, the roadmap ([`docs/FUTURE_WORK.md`](docs/FUTURE_WORK.md)), and diagram sources. |
+
 ## End-to-end flow
 
 1. The user submits a prompt in Claude Code, including through Remote Control.
