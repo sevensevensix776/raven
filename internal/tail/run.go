@@ -19,7 +19,9 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -29,6 +31,13 @@ import (
 	"raven-go/internal/rlog"
 	"raven-go/internal/state"
 )
+
+// backlogKeep bounds the unplayed speech backlog: when narration outpaces
+// playback, only the newest this-many blocks survive and the stale middle is
+// dropped, so the driver hears near-current progress instead of falling minutes
+// behind. Tunable; lower = fresher but skips more, higher = more complete but
+// laggier on long turns.
+const backlogKeep = 4
 
 // caption mirrors the hook's queue caption so the phone transcript renders live-
 // narrated blocks identically to Stop-hook replies.
@@ -95,11 +104,56 @@ func Run(args []string) error {
 	})
 	for {
 		r.pass()
+		// Bound the backlog every poll (independent of whether new blocks arrived,
+		// since the writer keeps draining and the queue can be deep from before).
+		if config.Load(home).LiveNarration {
+			pruneQueue(home, backlogKeep)
+		}
 		if *once {
 			return nil
 		}
 		time.Sleep(time.Duration(*interval) * time.Millisecond)
 	}
+}
+
+// pruneQueue caps the unplayed speech backlog to the newest `keep` blocks. A
+// queued block is one stamp with a .txt (awaiting synth) or .wav/.aiff (awaiting
+// playback); the writer plays them oldest-first. When the backlog exceeds keep,
+// delete the files for the oldest stamps so the writer jumps forward to
+// near-current narration. Deleting a file the writer already opened is safe on
+// macOS — it finishes the block via its fd, then the skipped ones simply never
+// play. Dropped blocks are also skipped in the phone transcript (acceptable:
+// they were stale). This never touches the newest `keep`, so normal short turns
+// (backlog <= keep) are untouched.
+func pruneQueue(home string, keep int) {
+	q := filepath.Join(home, "queue")
+	stampSet := map[int64]struct{}{}
+	for _, ext := range []string{"txt", "wav", "aiff"} {
+		matches, _ := filepath.Glob(filepath.Join(q, "*."+ext))
+		for _, m := range matches {
+			base := strings.TrimSuffix(filepath.Base(m), "."+ext)
+			if n, err := strconv.ParseInt(base, 10, 64); err == nil {
+				stampSet[n] = struct{}{}
+			}
+		}
+	}
+	if len(stampSet) <= keep {
+		return
+	}
+	stamps := make([]int64, 0, len(stampSet))
+	for s := range stampSet {
+		stamps = append(stamps, s)
+	}
+	sort.Slice(stamps, func(i, j int) bool { return stamps[i] < stamps[j] })
+	for _, s := range stamps[:len(stamps)-keep] {
+		ss := strconv.FormatInt(s, 10)
+		for _, ext := range []string{".txt", ".wav", ".aiff", ".caption.json"} {
+			os.Remove(filepath.Join(q, ss+ext))
+		}
+	}
+	rlog.Log(home, "tail", "backlog_pruned", map[string]any{
+		"dropped": len(stamps) - keep, "kept": keep,
+	})
 }
 
 // pass runs one poll: resolve the selected session, advance its cursor over any
