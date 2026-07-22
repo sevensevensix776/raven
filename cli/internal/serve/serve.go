@@ -26,7 +26,11 @@ import (
 	"raven-go/internal/state"
 )
 
-const defaultAddr = "100.64.0.1:8080"
+// defaultAddr is a safe loopback fallback. Set RAVEN_BIND (or --addr) to your
+// Mac's Tailscale IP — e.g. via the gitignored config.local.sh — so the iPhone
+// can reach the stream. Binding loopback by default keeps a fresh clone from
+// exposing the control API on every interface.
+const defaultAddr = "127.0.0.1:8080"
 
 type handler struct {
 	home   string

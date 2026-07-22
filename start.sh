@@ -11,6 +11,10 @@ RAVEN_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export RAVEN_HOME
 cd "$RAVEN_HOME" || exit 1
 
+# Machine-local overrides (RAVEN_BIND = your Mac's Tailscale IP, etc.). Gitignored,
+# so your address stays out of the repo; exported here for `raven serve`.
+[ -f config.local.sh ] && . ./config.local.sh
+
 ./stop.sh >/dev/null 2>&1
 sleep 1
 

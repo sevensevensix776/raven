@@ -20,3 +20,4 @@ logs/
 .transcript.lock
 tail-state/
 .tail.pid
+config.local.sh

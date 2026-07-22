@@ -21,7 +21,7 @@ CHANNELS = SPEECH / "channels.json"
 SELECTION = SPEECH / "selection.json"
 SPOKEN = SPEECH / "spoken.jsonl"
 STATE_LOCK = SPEECH / ".state.lock"
-TAILSCALE_IP = os.environ.get("HUGINN_BIND", "100.64.0.1")
+TAILSCALE_IP = os.environ.get("HUGINN_BIND", "127.0.0.1")
 
 
 def health_snapshot():

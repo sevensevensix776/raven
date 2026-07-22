@@ -2,6 +2,11 @@
 
 Raven is a voice-out companion for Claude Code: it turns the selected Claude session's completed replies into a continuous live audio stream on a Mac, then plays that stream through a native iPhone app while the user drives. Raven does not listen, transcribe, or send prompts. Voice-in remains Claude Code Remote Control plus iOS dictation; Raven owns only the return path from Claude to the driver's ears.
 
+<p align="center">
+  <img src="docs/images/app-transcript.png" alt="The Raven iPhone app: a live transcript of Claude's spoken replies with LIVE playback controls" width="300">
+</p>
+<p align="center"><sub><b>Raven on iPhone</b> — the live transcript of Claude's spoken replies, with the <b>LIVE</b> playback and channel controls. (Transcript content blurred.)</sub></p>
+
 ### The idea
 
 ![Raven overview](docs/raven-overview.png)
@@ -10,7 +15,7 @@ Raven is a voice-out companion for Claude Code: it turns the selected Claude ses
 
 ![Raven architecture](docs/raven-architecture.png)
 
-<sub>Diagram sources: [`docs/diagram-overview.mmd`](docs/diagram-overview.mmd), [`docs/diagram-architecture.mmd`](docs/diagram-architecture.mmd) — re-render with `~/code/blog/mermaid-themes/render.mjs`.</sub>
+<sub>Diagram sources: [`docs/diagram-overview.mmd`](docs/diagram-overview.mmd), [`docs/diagram-architecture.mmd`](docs/diagram-architecture.mmd) — render with any Mermaid renderer.</sub>
 
 The product and iPhone display name are **Raven**. A few implementation names still say `Huginn` or `Ear`; those are retained internal names, not separate systems.
 
@@ -33,10 +38,12 @@ Raven is one product in three parts, kept in a single repo. Each part kept its f
 4. `synthd.py` notices the oldest text job. Its already-warm Kokoro-82M model renders the reply with `af_heart` into an atomic `.wav`; macOS `say` is the fallback.
 5. `raven write` takes ready `.wav` or `.aiff` files oldest-first. If `synthd` is unavailable and a `.txt` has waited at least five seconds, the writer synthesizes it inline with `say` instead.
 6. The writer converts each clip to 24 kHz mono signed 16-bit PCM. Between replies it continuously emits a very low pink-noise floor. Its stdout remains attached to `pcm.fifo` for the life of the process.
-7. One persistent `ffmpeg -re` process reads the FIFO in real time and produces a live AAC HLS stream: two-second MPEG-TS segments, a five-segment sliding playlist, and no end marker.
+7. One persistent `ffmpeg -re` process reads the FIFO in real time and produces a live AAC HLS stream: one-second MPEG-TS segments, an eight-segment sliding playlist, and no end marker (tuned for low live-edge latency).
 8. The Raven iPhone app plays `http://100.64.0.1:8080/stream.m3u8` with `AVPlayer`, seeks near the live edge, owns the non-mixable playback audio session, and exposes Now Playing and CarPlay controls.
 
 The transcript is committed when the writer begins emitting a reply—not when Claude finishes and not when synthesis completes. That makes `/transcript` a record of audio that at least started delivery.
+
+**Live narration.** With `LIVE_NARRATION=1`, a long-lived `raven tail` process speaks each completed text block *during* a turn — before `Stop` — so multi-step, tool-using turns aren't silent, and interrupted turns are narrated too. The Stop hook then yields to the tailer (so the final block isn't spoken twice) and falls back to speaking it itself if the tailer is down. The tailer keeps the queue on the selected channel: switching channels drops the old session's audio. See [`docs/FUTURE_WORK.md`](docs/FUTURE_WORK.md) and `cli/internal/tail`.
 
 ## Runtime components
 
@@ -79,6 +86,17 @@ The hook and HTTP server share an `fcntl` lock at `.state.lock`. A Remote Contro
 The `UserPromptSubmit` and `Stop` hooks belong to the Claude Code session runtime, not to a particular terminal UI. They still execute when the turn originates through Claude Code Remote Control. Raven therefore needs no second transport for remote sessions.
 
 ## Operator guide
+
+### First-time setup
+
+`raven serve` binds a safe loopback address by default. Point it at your Mac's Tailscale IP so the iPhone can reach the stream:
+
+```bash
+tailscale ip -4                              # your Mac's tailnet IP, e.g. 100.64.0.1
+cp config.local.sh.example config.local.sh   # then set RAVEN_BIND to <that-ip>:8080
+```
+
+`config.local.sh` is gitignored, so your address never enters the repo; `start.sh` sources it and exports `RAVEN_BIND` for `raven serve`. The iPhone app's server address lives in `ios/` — see [`ios/README.md`](ios/README.md).
 
 ### Start and stop the Mac pipeline
 
