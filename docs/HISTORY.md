@@ -16,7 +16,7 @@ The project was built in one concentrated session from 2026-07-16 through 2026-0
 | 5. Build-out | During the session | Added channel selection, transcript, prompt display, mute, catch-up, dividers, cleanup, and uncapped speech. | The prototype became usable across real concurrent Claude sessions and drives. |
 | 6. Go migration | During the session | Ported hook, server, writer, and diagnose into one dependency-free `raven` binary. | Removed Bash quoting and installed-source drift while retaining Python at the ML boundary. |
 | 7. Live failures | During the session | Fixed double-speak, an exit-137 install failure, and task-notification transcript pollution. | Operational evidence and parity tests became part of the design, not cleanup work. |
-| 8. Frontier | End of the session | Investigated how to reduce time-to-first-word. | Token streaming was ruled out; sentence-streamed synthesis is the recommended next build; live narration remains a higher-risk later option. |
+| 8. Frontier | End of the session | Investigated how to reduce time-to-first-word. | Token streaming was ruled out; sentence-streamed synthesis is the recommended next build; live narration was scoped as a higher-risk later option (it has since shipped). |
 
 ![Raven project evolution](raven-evolution.png)
 
