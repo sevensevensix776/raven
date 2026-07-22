@@ -104,10 +104,11 @@ func Run(args []string) error {
 	})
 	for {
 		r.pass()
-		// Bound the backlog every poll (independent of whether new blocks arrived,
-		// since the writer keeps draining and the queue can be deep from before).
+		// Bound the backlog and keep the queue on the selected channel every poll
+		// (independent of whether new blocks arrived — the writer keeps draining,
+		// and a channel switch must flush the old session's audio).
 		if config.Load(home).LiveNarration {
-			pruneQueue(home, backlogKeep)
+			pruneQueue(home, state.SelectedSession(home), backlogKeep)
 		}
 		if *once {
 			return nil
@@ -116,44 +117,82 @@ func Run(args []string) error {
 	}
 }
 
-// pruneQueue caps the unplayed speech backlog to the newest `keep` blocks. A
-// queued block is one stamp with a .txt (awaiting synth) or .wav/.aiff (awaiting
-// playback); the writer plays them oldest-first. When the backlog exceeds keep,
-// delete the files for the oldest stamps so the writer jumps forward to
-// near-current narration. Deleting a file the writer already opened is safe on
-// macOS — it finishes the block via its fd, then the skipped ones simply never
-// play. Dropped blocks are also skipped in the phone transcript (acceptable:
-// they were stale). This never touches the newest `keep`, so normal short turns
-// (backlog <= keep) are untouched.
-func pruneQueue(home string, keep int) {
+// pruneQueue keeps the speech queue tight and on the selected channel. Two jobs,
+// run every poll:
+//
+//   - Channel switch: drop any queued block whose caption belongs to a session
+//     other than `selected`, so switching channels cuts the old session's audio
+//     instead of draining its backlog first.
+//   - Backlog: cap the selected session's own unplayed blocks to the newest
+//     `keep`, dropping the stale middle.
+//
+// A queued block is one stamp with a .txt (awaiting synth) or .wav/.aiff
+// (awaiting playback); its .caption.json carries the session_id. The writer plays
+// oldest-first, so removing older / other-session stamps makes it jump forward.
+// Deleting a file the writer already opened is safe on macOS — it finishes that
+// block via its fd, then the dropped ones never play (so a switch cuts after the
+// current sentence, not mid-word; true mid-sentence cut is the interruption
+// feature). Blocks whose caption/session can't be read are left alone (e.g.
+// manually injected clips), and when nothing is selected no session drop happens.
+func pruneQueue(home, selected string, keep int) {
 	q := filepath.Join(home, "queue")
-	stampSet := map[int64]struct{}{}
+	sess := map[int64]string{} // stamp -> session_id ("" if unknown)
 	for _, ext := range []string{"txt", "wav", "aiff"} {
 		matches, _ := filepath.Glob(filepath.Join(q, "*."+ext))
 		for _, m := range matches {
 			base := strings.TrimSuffix(filepath.Base(m), "."+ext)
-			if n, err := strconv.ParseInt(base, 10, 64); err == nil {
-				stampSet[n] = struct{}{}
+			n, err := strconv.ParseInt(base, 10, 64)
+			if err != nil {
+				continue
+			}
+			if _, ok := sess[n]; !ok {
+				sess[n] = captionSession(q, base)
 			}
 		}
 	}
-	if len(stampSet) <= keep {
-		return
+	var mine []int64
+	dropped := 0
+	for stamp, s := range sess {
+		if selected != "" && s != "" && s != selected {
+			removeStamp(q, stamp) // a channel you've switched away from
+			dropped++
+			continue
+		}
+		mine = append(mine, stamp)
 	}
-	stamps := make([]int64, 0, len(stampSet))
-	for s := range stampSet {
-		stamps = append(stamps, s)
-	}
-	sort.Slice(stamps, func(i, j int) bool { return stamps[i] < stamps[j] })
-	for _, s := range stamps[:len(stamps)-keep] {
-		ss := strconv.FormatInt(s, 10)
-		for _, ext := range []string{".txt", ".wav", ".aiff", ".caption.json"} {
-			os.Remove(filepath.Join(q, ss+ext))
+	if len(mine) > keep {
+		sort.Slice(mine, func(i, j int) bool { return mine[i] < mine[j] })
+		for _, s := range mine[:len(mine)-keep] {
+			removeStamp(q, s) // stale middle of the current channel
+			dropped++
 		}
 	}
-	rlog.Log(home, "tail", "backlog_pruned", map[string]any{
-		"dropped": len(stamps) - keep, "kept": keep,
-	})
+	if dropped > 0 {
+		rlog.Log(home, "tail", "queue_pruned", map[string]any{"dropped": dropped, "keep_session": short(selected)})
+	}
+}
+
+// captionSession reads the session_id from a queued block's caption sidecar.
+func captionSession(q, stamp string) string {
+	b, err := os.ReadFile(filepath.Join(q, stamp+".caption.json"))
+	if err != nil {
+		return ""
+	}
+	var c struct {
+		SessionID string `json:"session_id"`
+	}
+	if json.Unmarshal(b, &c) != nil {
+		return ""
+	}
+	return c.SessionID
+}
+
+// removeStamp deletes every file for one queued block.
+func removeStamp(q string, stamp int64) {
+	ss := strconv.FormatInt(stamp, 10)
+	for _, ext := range []string{".txt", ".wav", ".aiff", ".caption.json"} {
+		os.Remove(filepath.Join(q, ss+ext))
+	}
 }
 
 // pass runs one poll: resolve the selected session, advance its cursor over any
