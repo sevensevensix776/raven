@@ -1,5 +1,17 @@
 import Foundation
 
+/// The Mac's stream + control host (`host:port`), injected at build time from the
+/// `RAVEN_HOST` build setting via Info.plist's `RavenHost`. This keeps your
+/// Tailscale IP out of source — set it in `ios/raven-host.local` (see the iOS
+/// README). Falls back to loopback if the build didn't inject a value.
+enum RavenConfig {
+    static let host: String = {
+        let h = (Bundle.main.object(forInfoDictionaryKey: "RavenHost") as? String) ?? ""
+        return (h.isEmpty || h.contains("$(")) ? "127.0.0.1:8080" : h
+    }()
+    static var baseURL: URL { URL(string: "http://\(host)")! }
+}
+
 struct HuginnChannel: Codable, Identifiable, Equatable {
     let sessionID: String
     let project: String
@@ -78,7 +90,7 @@ final class HuginnAPI: ObservableObject {
     @Published private(set) var selectedSessionID: String?
     @Published private(set) var errorText: String?
 
-    private let baseURL = URL(string: "http://100.64.0.1:8080")!
+    private let baseURL = RavenConfig.baseURL
     private let session: URLSession
     private var etags: [String: String] = [:]
     private var lastLoadedCatchupSessionID: String?

@@ -21,3 +21,4 @@ logs/
 tail-state/
 .tail.pid
 config.local.sh
+ios/raven-host.local

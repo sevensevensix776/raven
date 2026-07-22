@@ -9,7 +9,7 @@ final class PlaybackController: NSObject, ObservableObject {
     @Published private(set) var isLive = false
     @Published private(set) var isMuted = false
 
-    private let streamURL = URL(string: "http://100.64.0.1:8080/stream.m3u8")!
+    private let streamURL = URL(string: "http://\(RavenConfig.host)/stream.m3u8")!
     private let session = AVAudioSession.sharedInstance()
     private let defaults = UserDefaults.standard
 

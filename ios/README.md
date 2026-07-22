@@ -31,40 +31,47 @@ The app has no in-app Stop button. System Now Playing and CarPlay expose Play/Pa
 
 ## Build, sign, install, and launch
 
-The build is fully command-line driven; Xcode.app supplies the toolchain but the GUI is not part of the workflow. Signing uses the existing App Store Connect API key and team:
+The build is fully command-line driven; Xcode.app supplies the toolchain but the GUI is not part of the workflow. Signing uses your own App Store Connect API key and Apple Developer team (placeholders shown):
 
 | Setting | Value |
 |---|---|
-| Key file | `~/.config/katib/AuthKey_AR974MP7HC.p8` |
-| Key ID | `AR974MP7HC` |
-| Issuer ID | `f611db3a-4907-4eaa-a462-712fedd93668` |
-| Development team | `4HUZT3VWKU` |
-| Bundle ID | `com.asifahmed.Ear` |
+| Key file | `/path/to/AuthKey_XXXXXXXXXX.p8` (kept outside the repo) |
+| Key ID | `YOUR_KEY_ID` |
+| Issuer ID | `YOUR_ISSUER_ID` |
+| Development team | `YOUR_TEAM_ID` |
+| Bundle ID | `com.yourname.Ear` |
 
 Connect and unlock the iPhone, trust the Mac if prompted, then run:
 
 ```bash
-cd ~/code/experiments/ear
+cd ~/code/experiments/raven/ios
+
+# One-time: point the app at your Mac's Tailscale IP. Kept out of git; baked into
+# the build via the RAVEN_HOST setting → Info.plist "RavenHost" → RavenConfig.host.
+cp raven-host.local.example raven-host.local   # then edit to <your-mac-tailscale-ip>:8080
 
 xcrun devicectl list devices
 export RAVEN_DEVICE_ID='PASTE-DEVICE-IDENTIFIER-HERE'
 export RAVEN_DERIVED_DATA="$PWD/build/DerivedData"
 export RAVEN_APP_PATH="$RAVEN_DERIVED_DATA/Build/Products/Release-iphoneos/Ear.app"
 
+# Signing values below are placeholders — use your own Apple Developer team and
+# App Store Connect API key.
 xcodebuild \
   -project Ear.xcodeproj \
   -scheme Ear \
   -configuration Release \
   -destination "id=$RAVEN_DEVICE_ID" \
   -derivedDataPath "$RAVEN_DERIVED_DATA" \
-  DEVELOPMENT_TEAM=4HUZT3VWKU \
-  PRODUCT_BUNDLE_IDENTIFIER=com.asifahmed.Ear \
+  RAVEN_HOST="$(cat raven-host.local)" \
+  DEVELOPMENT_TEAM=YOUR_TEAM_ID \
+  PRODUCT_BUNDLE_IDENTIFIER=com.yourname.Ear \
   CODE_SIGN_STYLE=Automatic \
   -allowProvisioningUpdates \
   -allowProvisioningDeviceRegistration \
-  -authenticationKeyPath /Users/asifahmed/.config/katib/AuthKey_AR974MP7HC.p8 \
-  -authenticationKeyID AR974MP7HC \
-  -authenticationKeyIssuerID f611db3a-4907-4eaa-a462-712fedd93668 \
+  -authenticationKeyPath /path/to/AuthKey_XXXXXXXXXX.p8 \
+  -authenticationKeyID YOUR_KEY_ID \
+  -authenticationKeyIssuerID YOUR_ISSUER_ID \
   clean build
 
 codesign --verify --deep --strict --verbose=2 "$RAVEN_APP_PATH"
@@ -73,7 +80,7 @@ xcrun devicectl device install app \
   "$RAVEN_APP_PATH"
 xcrun devicectl device process launch \
   --device "$RAVEN_DEVICE_ID" \
-  com.asifahmed.Ear
+  com.yourname.Ear
 ```
 
 The key file is a signing credential. Keep it at the configured private path; do not copy it into this repository or a build artifact.
@@ -140,7 +147,7 @@ Uploads are diagnostic only. They do not keep the audio session alive and do not
 
 ## Network contract
 
-The service base URL is compiled into `PlaybackController.swift` and `HuginnAPI.swift` as `http://100.64.0.1:8080`. `Info.plist` grants an App Transport Security exception for insecure HTTP to that address. The phone must be able to reach that Tailscale IP; the app has no host settings or discovery screen.
+The service base URL comes from the `RAVEN_HOST` build setting → `Info.plist` `RavenHost` → `RavenConfig.host` (in `HuginnAPI.swift`), set locally in the gitignored `raven-host.local`. `Info.plist` relaxes App Transport Security (`NSAllowsArbitraryLoads`) to allow the plain-HTTP tailnet stream — Tailscale encrypts the transport, and there is no public HTTP endpoint. The phone must be able to reach that Tailscale IP; the app has no in-app host setting.
 
 | Endpoint | App behavior |
 |---|---|
