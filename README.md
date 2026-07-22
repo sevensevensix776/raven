@@ -1,219 +1,262 @@
 # Raven
 
-Raven is a voice-out companion for Claude Code: it turns the selected Claude session's completed replies into a continuous live audio stream on a Mac, then plays that stream through a native iPhone app while the user drives. Raven does not listen, transcribe, or send prompts. Voice-in remains Claude Code Remote Control plus iOS dictation; Raven owns only the return path from Claude to the driver's ears.
+Raven speaks Claude Code's replies aloud so you can keep a session moving while
+driving. It turns the selected session's output into a continuous live audio
+stream on a Mac and plays it through a native iPhone app — including while the
+phone is locked and over CarPlay.
+
+Raven does not listen, transcribe, or send prompts. Voice-in stays Claude Code
+Remote Control plus iOS dictation. Raven owns only the return path, from Claude
+to your ears.
 
 <p align="center">
   <img src="docs/images/app-transcript.png" alt="The Raven iPhone app: a live transcript of Claude's spoken replies with LIVE playback controls" width="300">
 </p>
 <p align="center"><sub><b>Raven on iPhone</b> — the live transcript of Claude's spoken replies, with the <b>LIVE</b> playback and channel controls. (Transcript content blurred.)</sub></p>
 
-### The idea
-
 ![Raven overview](docs/raven-overview.png)
 
-### The pipeline
+## ⚠️ Read this before you use it while driving
+
+Raven makes Claude Code **audible**. It does not make it **safe to operate
+blind**, and two gaps matter:
+
+- **Never approve a tool call you have not read.** Claude Code asks permission
+  before running commands. Raven narrates the reply, not the pending approval,
+  and a spoken "yes" through Remote Control can authorise a command you never
+  saw. Deferred approval is designed but **not built** — see
+  [`docs/FUTURE_WORK.md`](docs/FUTURE_WORK.md). Until it is, treat every approval
+  as something to handle parked.
+- **Raven has no audible state.** If the pipeline stalls, you hear silence — the
+  same silence as Claude thinking. Do not debug it while moving.
+
+Drive first. The session can wait.
+
+## Requirements
+
+Raven is macOS-and-iPhone specific and makes no attempt to be portable.
+
+| Component | Needs |
+|---|---|
+| Mac | Apple Silicon — `mlx-audio` is Metal-backed, so Intel Macs are not supported. Developed and run on macOS 26; earlier versions are untested. |
+| Go | 1.25+ (`cli/` has no third-party dependencies) |
+| Python | 3.12 for the synthesis venv, plus `ffmpeg` on `PATH` |
+| Network | [Tailscale](https://tailscale.com) on both the Mac and the iPhone |
+| iPhone | iOS 26+, built and signed with Xcode 26+ |
+| Claude Code | A Claude.ai subscription. Raven uses lifecycle hooks, not the API — no metered spend, ~$0 per reply. |
+
+First run downloads the Kokoro-82M weights (~340 MB) into
+`~/.cache/huggingface`. That download happens once and is the slowest part of
+setup; synthesis is local and offline afterwards.
+
+## Quickstart
+
+```bash
+git clone <your-fork> ~/code/experiments/raven
+cd ~/code/experiments/raven
+```
+
+**`RAVEN_HOME` is the clone path.** Everything resolves relative to it and it
+defaults to `~/code/experiments/raven`. Clone somewhere else and you must export
+`RAVEN_HOME` in your shell and in `config.local.sh`, or the hook will silently
+no-op — a missing home is deliberately not an error, so that speech can never
+block a Claude Code turn.
+
+```bash
+# 1. Synthesis venv (Kokoro weights download on first synth)
+uv venv .venv --python 3.12
+uv pip install --python .venv/bin/python -r requirements.txt
+
+# 2. Build and install the binary
+cd cli && ./install.sh && cd ..
+
+# 3. Point the server at your tailnet address
+tailscale ip -4                              # e.g. 100.x.y.z
+cp config.local.sh.example config.local.sh   # set RAVEN_BIND=<that-ip>:8080
+
+# 4. Start the pipeline
+./start.sh
+raven diagnose                               # non-zero exit = not serving
+
+# 5. Prove the audio path before involving Claude
+./say.sh "Raven audio path is live."
+```
+
+`config.local.sh` is gitignored, so your address never enters the repo.
+
+Then wire the hook into `~/.claude/settings.json` for `UserPromptSubmit`, `Stop`,
+and `SessionEnd` — see [`cli/README.md`](cli/README.md#claude-code-wiring) — and
+build the iPhone app per [`ios/README.md`](ios/README.md).
+
+## How it works
 
 ![Raven architecture](docs/raven-architecture.png)
 
-<sub>Diagram sources: [`docs/diagram-overview.mmd`](docs/diagram-overview.mmd), [`docs/diagram-architecture.mmd`](docs/diagram-architecture.mmd) — render with any Mermaid renderer.</sub>
+<sub>Sources: [`docs/diagram-overview.mmd`](docs/diagram-overview.mmd), [`docs/diagram-architecture.mmd`](docs/diagram-architecture.mmd).</sub>
 
-The product and iPhone display name are **Raven**. A few implementation names still say `Huginn` or `Ear`; those are retained internal names, not separate systems.
+**`raven tail` is the primary producer.** It follows the selected session's
+transcript and queues each completed assistant text block *during* the turn, so
+long multi-step turns narrate as they go instead of staying silent until the end.
+Turns you interrupt with a new message are still spoken.
+
+**`raven hook` is the fallback.** On `Stop` it checks whether the tailer is
+alive; if it is, the hook yields and enqueues nothing, so the final block is
+never spoken twice. If the tailer is down, the hook speaks the reply itself —
+which is why disabling live narration is instant and safe. Full detail in
+[`docs/LIVE_NARRATION.md`](docs/LIVE_NARRATION.md).
+
+From the queue onward:
+
+1. `synthd.py` renders the oldest job with a warm Kokoro-82M model into an atomic
+   `.wav`. macOS `say` is the fallback on any synthesis error.
+2. `raven write` consumes ready audio oldest-first, converts it to 24 kHz mono
+   s16le PCM, and emits a low pink-noise floor between clips. Its stdout stays
+   attached to `pcm.fifo` for the process lifetime.
+3. One persistent `ffmpeg -re` reads the FIFO in real time and produces a live
+   AAC HLS stream: one-second segments, an eight-segment sliding playlist, no end
+   marker.
+4. The iPhone app plays that playlist with `AVPlayer`, holds a non-mixable
+   playback session, and exposes Now Playing and CarPlay controls.
+
+The transcript is committed when the writer *begins emitting* a reply — not when
+Claude finishes and not when synthesis completes — so `/transcript` records audio
+that at least started delivery.
+
+### Load-bearing invariants
+
+Architectural, not incidental. Breaking any one of these breaks background
+playback in a way that unit tests will not catch.
+
+- **The PCM timeline never ends.** The writer always emits speech or an idle
+  floor. The proven default is low pink noise, not digital silence: it keeps
+  `AVPlayer` consuming a live stream while backgrounded and stops car audio
+  hardware from sleeping and clipping the first word. `ffmpeg -re` is equally
+  load-bearing — without real-time pacing the encoder drains the FIFO faster than
+  wall time and destroys the timeline. ([ADR 0003](docs/adr/0003-continuous-hls-comfort-noise.md))
+- **The HLS encoder is persistent.** One encoder, one FIFO, one monotonic
+  timeline. Interrupt and skip work may kill only the disposable per-clip
+  decoder — never `.ffmpeg.pid`, never `pcm.fifo`. ([ADR 0010](docs/adr/0010-latest-wins-interrupt.md))
+- **Queue commits are atomic.** Caption metadata first, `.txt` rename last as the
+  ready marker. The writer must never see a half-written job.
+- **Channel state has one lock.** Hook, tailer, and server share `.state.lock`, so
+  a Remote Control prompt, a follow-mode update, and a phone pin cannot tear each
+  other's state.
+- **Remote Control does not bypass the hook.** Lifecycle hooks belong to the
+  Claude Code session runtime, not to a terminal UI, so they fire for remote
+  turns too. Raven needs no second transport.
 
 ## Repository layout
 
-Raven is one product in three parts, kept in a single repo. Each part kept its full history through the merge into this monorepo.
-
 | Path | What it is |
 | --- | --- |
-| `/` (root) | **The Mac runtime** — the always-on pipeline: the `synthd` Kokoro daemon, `start.sh` / `stop.sh`, `config.sh`, and the shell/Python glue. `RAVEN_HOME` points here. |
-| [`cli/`](cli/) | **The `raven` Go binary** — the Claude Code hook, the HLS + control server, the PCM writer, the live-narration transcript tailer, and diagnostics. Built and installed to `~/.local/bin/raven` via [`cli/install.sh`](cli/install.sh). |
-| [`ios/`](ios/) | **The iPhone app** (SwiftUI; internal name *Ear*) — a background HLS player with Now Playing and CarPlay controls. |
-| [`docs/`](docs/) | Architecture, ADRs, the drive log, the roadmap ([`docs/FUTURE_WORK.md`](docs/FUTURE_WORK.md)), and diagram sources. |
+| `/` (root) | The Mac runtime: `synthd.py`, `start.sh` / `stop.sh`, `config.sh`. `RAVEN_HOME` points here. |
+| [`cli/`](cli/) | The `raven` Go binary — hook, tailer, server, writer, diagnostics. |
+| [`ios/`](ios/) | The iPhone app (SwiftUI; internal name *Ear*). |
+| [`docs/`](docs/) | [API reference](docs/API.md), [ADRs](docs/adr/), [live narration](docs/LIVE_NARRATION.md), [roadmap](docs/FUTURE_WORK.md), [history](docs/HISTORY.md). |
 
-## End-to-end flow
-
-1. The user submits a prompt in Claude Code, including through Remote Control.
-2. Claude Code invokes `~/.local/bin/raven hook` for `UserPromptSubmit`. The hook updates the channel registry and, in follow mode, makes that session active.
-3. When Claude finishes, `raven hook` runs for `Stop`. It cleans the reply for speech and atomically commits `queue/<stamp>.caption.json` followed by `queue/<stamp>.txt`—but only if that session is selected.
-4. `synthd.py` notices the oldest text job. Its already-warm Kokoro-82M model renders the reply with `af_heart` into an atomic `.wav`; macOS `say` is the fallback.
-5. `raven write` takes ready `.wav` or `.aiff` files oldest-first. If `synthd` is unavailable and a `.txt` has waited at least five seconds, the writer synthesizes it inline with `say` instead.
-6. The writer converts each clip to 24 kHz mono signed 16-bit PCM. Between replies it continuously emits a very low pink-noise floor. Its stdout remains attached to `pcm.fifo` for the life of the process.
-7. One persistent `ffmpeg -re` process reads the FIFO in real time and produces a live AAC HLS stream: one-second MPEG-TS segments, an eight-segment sliding playlist, and no end marker (tuned for low live-edge latency).
-8. The Raven iPhone app plays `http://100.64.0.1:8080/stream.m3u8` with `AVPlayer`, seeks near the live edge, owns the non-mixable playback audio session, and exposes Now Playing and CarPlay controls.
-
-The transcript is committed when the writer begins emitting a reply—not when Claude finishes and not when synthesis completes. That makes `/transcript` a record of audio that at least started delivery.
-
-**Live narration.** With `LIVE_NARRATION=1`, a long-lived `raven tail` process speaks each completed text block *during* a turn — before `Stop` — so multi-step, tool-using turns aren't silent, and interrupted turns are narrated too. The Stop hook then yields to the tailer (so the final block isn't spoken twice) and falls back to speaking it itself if the tailer is down. The tailer keeps the queue on the selected channel: switching channels drops the old session's audio. See [`docs/FUTURE_WORK.md`](docs/FUTURE_WORK.md) and `cli/internal/tail`.
-
-## Runtime components
-
-| Component | Responsibility |
-|---|---|
-| `raven hook` | Tracks sessions and queues the selected session's completed replies. The retained Bash hook at `~/.claude/hooks/speak-reply.sh` is the rollback path. |
-| `synthd.py` | Keeps Kokoro-82M warm, synthesizes queued text, optionally summarizes, and falls back to `say` on synthesis errors. |
-| `raven write` | Emits an endless PCM timeline, chooses ready audio oldest-first, supplies the idle floor and speech pre-roll, and records transcript/emission events. `writer.sh` is retained for parity/rollback. |
-| persistent `ffmpeg -re` | Converts the FIFO's real-time PCM into the single live HLS timeline. |
-| `raven serve` | Serves HLS and the tailnet control, transcript, health, and phone-log API on the address `RAVEN_BIND` selects. |
-| `raven tail` | Live narration: watches the selected session's transcript and queues each completed text block *during* the turn, keeping the queue on the selected channel. Gated by `LIVE_NARRATION`. |
-| Raven for iPhone | Plays the live stream, selects a channel, displays the spoken transcript, mutes locally, and uploads playback evidence. |
-| `ravenlog.py` | Appends structured Mac-side events to `logs/events.jsonl`. |
-| `raven diagnose` | Combines PID, heartbeat, queue, synthesis, selection, and uploaded-phone-log evidence into one verdict. |
-| `start.sh`, `stop.sh`, `spawn.py` | Start and stop the five detached process groups without tying their lifetime to the launching shell. |
-
-## Load-bearing invariants
-
-These properties are architectural, not incidental.
-
-### The PCM timeline does not end
-
-The writer always emits either speech or an idle floor. The proven default is low pink noise, not digital silence. This keeps `AVPlayer` consuming a live audio stream while the app is backgrounded and prevents car audio hardware from sleeping and clipping the first word of a reply.
-
-`ffmpeg -re` is equally important. Without it, the encoder drains the FIFO faster than wall-clock time and destroys the live HLS timeline.
-
-### The HLS encoder is persistent
-
-There is one long-lived encoder, one FIFO, and one monotonically advancing HLS stream. Interrupt and skip work must kill only the disposable per-clip decoder. It must never kill `.ffmpeg.pid`, close or recreate `pcm.fifo`, or restart the HLS timeline. The committed latest-wins design is documented in [ADR 0010](docs/adr/0010-latest-wins-interrupt.md).
-
-### Queue commits are atomic
-
-Producers write temporary files and rename them into place. For hook jobs, caption metadata is committed first and `.txt` last; the text rename is the ready marker. `synthd` similarly publishes `.wav` only after the complete file exists. `raven write` must never see a half-written job or clip.
-
-### Channel state has one lock
-
-The hook and HTTP server share an `fcntl` lock at `.state.lock`. A Remote Control prompt, a follow-mode update, and a phone pin cannot tear or overwrite one another's `channels.json` and `selection.json` state.
-
-### Remote Control does not bypass the hook
-
-The `UserPromptSubmit` and `Stop` hooks belong to the Claude Code session runtime, not to a particular terminal UI. They still execute when the turn originates through Claude Code Remote Control. Raven therefore needs no second transport for remote sessions.
-
-## Operator guide
-
-### First-time setup
-
-`raven serve` binds a safe loopback address by default. Point it at your Mac's Tailscale IP so the iPhone can reach the stream:
-
-```bash
-tailscale ip -4                              # your Mac's tailnet IP, e.g. 100.64.0.1
-cp config.local.sh.example config.local.sh   # then set RAVEN_BIND to <that-ip>:8080
-```
-
-`config.local.sh` is gitignored, so your address never enters the repo; `start.sh` sources it and exports `RAVEN_BIND` for `raven serve`. The iPhone app's server address lives in `ios/` — see [`ios/README.md`](ios/README.md).
-
-### Start and stop the Mac pipeline
-
-```bash
-~/code/experiments/raven/start.sh
-raven diagnose
-```
-
-`start.sh` first stops any recorded prior processes, recreates the HLS output, and launches `raven write`, the encoder, `raven serve`, and the Python synthesis daemon in detached sessions. Their combined stdout and stderr go to `~/code/experiments/raven/.detached.log`.
-
-```bash
-~/code/experiments/raven/stop.sh
-```
-
-Stopping removes the five PID files and sweeps known child processes. It does not delete recent queue jobs; the writer independently discards jobs older than ten minutes.
-
-### Connect the phone
-
-1. Put the Mac and iPhone on the same Tailscale tailnet.
-2. Open Raven and tap **Start**.
-3. Wait for the transport to show **LIVE**. The status line reports connection, retry, and last proof-of-progress state.
-
-The HLS playlist request is also the listener heartbeat. If the playlist has not been requested for ten seconds, the writer keeps the stream alive but holds queued replies rather than broadcasting them to nobody.
-
-### Pick a Claude channel
-
-Open **Channels** in the app and choose one mode:
-
-- **Follow active session** switches to whichever Claude session most recently received a prompt. A `UserPromptSubmit` event performs the switch.
-- **Pin one session** keeps Raven on that session until another session is pinned or follow mode is restored.
-
-The hook records up to 50 sessions active in the last 24 hours; the currently pinned session is retained even when older. A `Stop` event from a non-selected session updates its channel metadata but does not enter the speech queue.
-
-### Mute without stopping playback
-
-Tap **Mute** in Raven. This sets `AVPlayer.isMuted`; the player, audio session, HLS requests, and background stream remain active. Use the system Now Playing pause control when the stream itself should stop.
-
-### Test the audio path
-
-```bash
-~/code/experiments/raven/say.sh "Raven audio path is live."
-```
-
-This queues a macOS `say` clip directly. It is useful for proving FIFO → HLS → iPhone playback, but it bypasses the Claude hook, Kokoro, and transcript metadata.
-
-### Diagnose a problem
-
-```bash
-raven diagnose
-raven diagnose --since-min 15
-curl -fsS http://100.64.0.1:8080/health | python3 -m json.tool
-tail -100 ~/code/experiments/raven/logs/events.jsonl
-tail -100 ~/code/experiments/raven/logs/phone.jsonl
-tail -100 ~/code/experiments/raven/.detached.log
-```
-
-`raven diagnose` verifies all five process PIDs, listener heartbeat age, queue depth, channel selection, recent synthesis backends and latency, gate skips, fallback errors, and uploaded phone evidence. `EarPlayback.log` progress is strong evidence that media time advanced in `AVPlayer`; it is not proof that sound reached the car speakers.
+The product and iPhone display name are **Raven**. Some internal names still say
+`Huginn` or `Ear`; those are retained identifiers, not separate systems.
 
 ## Configuration
 
-Edit `~/code/experiments/raven/config.sh`, then restart with `~/code/experiments/raven/stop.sh && ~/code/experiments/raven/start.sh` for a predictable full reload.
+Edit `config.sh`, then `./stop.sh && ./start.sh` for a predictable reload.
 
-| Setting | Current value | Meaning |
+| Setting | Default | Meaning |
 |---|---:|---|
-| `VOICE_BACKEND` | `kokoro` | Primary synthesis backend: `kokoro` or `say`. Any value other than `kokoro` takes the `say` path. |
-| `KOKORO_VOICE` | `af_heart` | Kokoro voice passed to `mlx-audio`. Known alternatives recorded in config are `am_michael`, `bf_emma`, and `am_puck`. |
-| `KOKORO_MODEL` | `prince-canuma/Kokoro-82M` | Model identifier loaded and retained by the daemon. Weights download through the Hugging Face cache on first use. |
-| `SAY_VOICE` | `Samantha` | Voice used by `synthd` when it falls back to macOS `say`. The writer's five-second emergency fallback currently uses the Mac's default `say` voice. |
-| `SUMMARIZE` | `0` | `1` runs the local summary pass before synthesis; `0` speaks cleaned replies verbatim. This is implemented but intentionally off. |
-| `SUMMARY_MODEL` | `qwen3:1.7b` | Ollama model used when summarization is enabled. See [`docs/SCOPE_SUMMARIZATION.md`](docs/SCOPE_SUMMARIZATION.md). |
-| `IDLE_FLOOR` | `noise` | `noise` emits the proven pink-noise floor. `silence` emits digital silence and adds pink pre-roll before speech; that mode is experimental. |
-| `MAX_SPOKEN_CHARS` | `0` | Maximum cleaned reply length. `0` means uncapped. Positive values use a byte-oriented `head -c` cut and can end mid-sentence. |
+| `VOICE_BACKEND` | `kokoro` | `kokoro` or `say`. Any other value takes the `say` path. |
+| `KOKORO_VOICE` | `af_heart` | Voice passed to `mlx-audio`. Alternatives: `am_michael`, `bf_emma`, `am_puck`. |
+| `KOKORO_MODEL` | `prince-canuma/Kokoro-82M` | Model retained by the daemon; downloads via the Hugging Face cache on first use. |
+| `SAY_VOICE` | `Samantha` | Voice used when `synthd` falls back to `say`. |
+| `LIVE_NARRATION` | `1` | `0` stops the tailer; the Stop hook resumes speaking whole replies. |
+| `IDLE_FLOOR` | `noise` | `noise` is the proven floor. `silence` is implemented but has not passed the locked-phone drive test. |
+| `MAX_SPOKEN_CHARS` | `0` | `0` is uncapped. Positive values cut **bytes**, not sentences, and can end mid-word. |
+| `SUMMARIZE` | `0` | `1` runs a local Ollama summary pass first. Implemented, deliberately off, undertuned. |
+| `CHANNEL_TTL_HOURS` | `6` | Idle-channel retention backstop. |
 
-The hook removes fenced code blocks, inline code, Markdown punctuation, and long filesystem paths before speech. It prepends `In <project>.` to the spoken clip when a project name is available; the transcript retains the cleaned reply without that spoken prefix.
+`RAVEN_BIND` and `RAVEN_HOME` are environment variables, not `config.sh` keys.
 
-## Tailnet API
+Speech cleaning strips fenced and inline code, Markdown punctuation, and long
+filesystem paths. To fix a mispronounced symbol, add a pair to `spokenSubst` in
+[`cli/internal/clean/clean.go`](cli/internal/clean/clean.go) and a case to its
+test — that is the one place that governs pronunciation.
 
-The server binds plain HTTP to `100.64.0.1:8080` by default. `RAVEN_BIND` can override the bind address for `raven serve`; it is an environment variable, not a `config.sh` setting.
+## Operating it
 
-| Method and path | Request | Response and behavior |
-|---|---|---|
-| `GET /stream.m3u8` | — | Live HLS playlist. Each GET refreshes `hls/.heartbeat`, which marks a listener live for ten seconds. HLS segment URLs are served from the same root. |
-| `GET /channels` | Optional `If-None-Match` | Channels newest-first plus `{mode, session_id}` selection. Returns `304` when the ETag matches. |
-| `GET /transcript?limit=50` | Optional `If-None-Match`; `limit` is clamped to 1–100 | The most recent emitted transcript lines as `{"lines":[...]}`. Returns `304` when unchanged. |
-| `POST /active` | `{"mode":"pinned","session_id":"…"}` or `{"mode":"follow","session_id":null}` | Pins a known session or restores follow mode. State changes are locked and atomic. |
-| `GET /health` | — | Current heartbeat age, listener state, queue counts, selection, channel count, and last spoken record. |
-| `POST /log` | `{"device":"iphone","lines":["…"]}`; body limit 256 KiB | Appends up to 2,000 submitted lines to `logs/phone.jsonl` and records a `phone/log_upload` event. |
+**Pick a channel.** In the app, **Follow active session** tracks whichever
+session most recently received a prompt; **Pin** holds one until you change it.
+The registry keeps up to 50 sessions from the last 24 hours. A `Stop` from a
+non-selected session updates metadata but never enters the speech queue.
 
-The API has no application-level authentication. Its boundary is the Tailscale address, and the iPhone app contains an ATS exception for HTTP to that exact IP.
+**Switching channels cuts the old audio.** Queued blocks from the session you
+left are dropped immediately, but the clip already playing finishes — so the cut
+lands after the current sentence, not mid-word.
 
-## State and evidence
+**Mute** sets `AVPlayer.isMuted`; the player, session, and HLS requests stay
+live. Use the system Now Playing pause to stop the stream itself.
 
-| Path | Contents |
-|---|---|
-| `queue/` | Pending `.txt`, ready `.wav`/`.aiff`, and `.caption.json` jobs. Files older than ten minutes are discarded. |
-| `channels.json` | Recent Claude sessions, project names, last activity, and a short last-line preview. |
-| `selection.json` | Follow/pinned mode, selected session, and most recently prompted follow session. |
-| `spoken.jsonl` | Last 200 transcript entries, rewritten atomically when emission starts. |
-| `logs/events.jsonl` | Unified structured hook, synthesis, writer, server, and phone-upload events. The logger trims to the newest 20,000 lines once the file grows beyond its size threshold. |
-| `logs/phone.jsonl` | Playback log lines uploaded from the iPhone. |
-| `.detached.log` | Combined stdout/stderr from detached Mac processes. |
+**No listener means no delivery.** The HLS playlist request *is* the heartbeat.
+If it goes stale for ten seconds the writer keeps the timeline alive but holds
+queued replies rather than broadcasting to nobody. Jobs older than ten minutes
+are dropped instead of reading stale replies on reconnect.
 
-## Limits and gotchas
+### Diagnosing
 
-- **HLS is not conversationally instant.** One-second segments plus the live playlist and `AVPlayer` buffer produce roughly 3–5 seconds of end-to-end playback latency. That is a fixed delivery cost, not synthesis time — synthesis is about a second. Removing it means replacing HLS with a raw stream into the app; see [`docs/FUTURE_WORK.md`](docs/FUTURE_WORK.md).
-- **The audible idle floor is deliberate.** `noise` is the mode proven to preserve background playback and wake the car audio path. `IDLE_FLOOR=silence` is implemented but has not passed the equivalent locked-phone drive test.
-- **Summarization is off and untuned.** With `SUMMARIZE=0` and `MAX_SPOKEN_CHARS=0`, a long Claude reply becomes a long spoken clip. The existing summarizer is guarded but not yet drive-tuned.
-- **Long replies have a synthesis wait (time-to-first-word).** Kokoro synthesizes the whole reply before it plays — measured ~15s for a ~2,500-char reply. The writer waits for synthd rather than racing it with `say` (that race caused double-speak; fixed). So a long reply is preceded by that much comfort-noise hiss. The necessary fix is per-sentence streaming synthesis (first sentence in ~0.3s) — see [`docs/SCOPE_STREAMING_SYNTHESIS.md`](docs/SCOPE_STREAMING_SYNTHESIS.md).
-- **Foreground data and background audio are different.** HLS audio continues under the iOS background-audio mode. Channel polling, transcript polling, and `/log` uploads run only while the app scene is active.
-- **Current playback is FIFO once a clip starts.** Ready audio is consumed oldest-first and the writer lets the active clip finish. Switching channels drops the old session's *queued* audio immediately, but the clip already playing still finishes. Hard latest-wins interruption and manual Skip are decided but unbuilt — see [ADR 0010](docs/adr/0010-latest-wins-interrupt.md) and the roadmap in [`docs/FUTURE_WORK.md`](docs/FUTURE_WORK.md).
-- **Narration follows completed text blocks, not whole turns.** With `LIVE_NARRATION=1`, `raven tail` speaks each block as it lands, so multi-step and interrupted turns are both narrated. Turn live narration off and Raven falls back to the `Stop` hook alone — and Claude Code fires `Stop` only on a *clean* turn completion, so a turn you interrupt with a new message is never spoken. Diagnostic signature in that fallback mode: `queued` events in `logs/events.jsonl` stop while replies keep appearing on screen.
-- **No listener means no delivery.** The queue is held when the playlist heartbeat is stale, then resumes when a listener returns. Jobs that become more than ten minutes old are dropped instead of reading stale replies on reconnect.
-- **Character caps are blunt.** Any positive `MAX_SPOKEN_CHARS` value cuts bytes, not sentences. Keep it at `0` unless a hard cap is more important than a clean ending.
-- **Raven is tailnet-specific, and you configure the address once.** There is no service discovery and no in-app settings screen. The Mac's listen address comes from `RAVEN_BIND` (see [First-time setup](#first-time-setup)) and the iPhone app is built against `RAVEN_HOST`; both ship with safe placeholder defaults, so a fresh clone binds loopback until you point it at your own Tailscale address.
-- **The Mac orchestration migration is complete.** All five subcommands—`raven hook`, `raven serve`, `raven write`, `raven diagnose`, and `raven tail`—are implemented in Go and the live pipeline uses them. `synthd.py` intentionally stays Python at the Kokoro/`mlx-audio` boundary. The Bash/Python predecessors remain as parity fixtures and rollback paths. Build/install the Go binary with [`cli/install.sh`](cli/install.sh), not `cp` over the live executable: in-place replacement can make new macOS execs die with SIGKILL while long-lived Raven processes still map the old binary. See the [cli README](cli/README.md).
+```bash
+raven diagnose                  # exits non-zero when the pipeline is not serving
+raven diagnose --since-min 15
+curl -fsS "http://$RAVEN_BIND/health" | python3 -m json.tool
+tail -100 logs/events.jsonl     # hook, tailer, synthesis, writer, server
+tail -100 logs/phone.jsonl      # uploaded from the app
+tail -100 .detached.log
+```
 
-## License
+`raven diagnose` checks all five PIDs, heartbeat age, queue depth, selection,
+recent synthesis backends and latency, gate skips, and fallback errors. Phone
+playback progress proves media time advanced in `AVPlayer` — it is *not* proof
+that sound reached the car speakers.
+
+**Rolling back:** set `LIVE_NARRATION=0` to drop to Stop-hook speech, or check
+out an earlier commit. See [`docs/ROLLBACK.md`](docs/ROLLBACK.md).
+
+## Limits
+
+- **HLS is not conversationally instant.** One-second segments plus playlist and
+  `AVPlayer` buffering cost roughly 3–5 seconds end to end. That is delivery, not
+  synthesis. Removing it means replacing HLS with a raw stream into the app.
+- **Long replies wait on whole-block synthesis.** Kokoro renders a complete block
+  before it plays — about 15 s for ~2,500 characters — so a long block is
+  preceded by that much comfort noise. The writer waits for `synthd` rather than
+  racing it with `say`, because that race caused double-speak. Per-sentence
+  streaming is the fix; it is on the roadmap, not built.
+- **The audible idle floor is deliberate.** The hiss between replies is what
+  keeps background playback and the car audio route alive.
+- **Playback is FIFO once a clip starts.** True mid-sentence barge-in and a manual
+  Skip are decided but unbuilt ([ADR 0010](docs/adr/0010-latest-wins-interrupt.md)).
+- **With `LIVE_NARRATION=0`, interrupted turns are never spoken.** Claude Code
+  fires `Stop` only on clean completion. Diagnostic signature: `queued` events
+  stop appearing in `logs/events.jsonl` while replies keep appearing on screen.
+- **Foreground data, background audio.** HLS audio continues in the background;
+  channel polling, transcript polling, and log uploads run only while the app
+  scene is active.
+- **One tailnet, configured once.** No service discovery, no in-app settings
+  screen. The Mac address comes from `RAVEN_BIND`, the app is built against
+  `RAVEN_HOST`, and both ship with loopback placeholders so a fresh clone is
+  inert until you point it at your own tailnet.
+
+## Security
+
+The HTTP API has **no authentication**. Anyone who can reach the port can read
+your transcripts, change the selected session, and hear the stream. The only
+boundary is Tailscale. Do not port-forward to it. Read
+[SECURITY.md](SECURITY.md) before exposing anything.
+
+## More
+
+- [`docs/FUTURE_WORK.md`](docs/FUTURE_WORK.md) — the ranked roadmap, including the two real eyes-free gaps
+- [`docs/HISTORY.md`](docs/HISTORY.md) — how the project got here, including what v1 got wrong
+- [`docs/adr/`](docs/adr/) — the decisions and what was rejected
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — the bar for a PR
+
+## Licence
 
 MIT — see [LICENSE](LICENSE).
