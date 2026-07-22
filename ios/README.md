@@ -122,7 +122,7 @@ Content-Type: application/json
 {"device":"iphone","lines":["2026-… PLAYING_OBSERVED …"]}
 ```
 
-The app sends at most the newest 500 lines in one request. On HTTP 200 it advances the persisted byte offset; failures are silent and retried at the next foreground upload opportunity. The Mac appends the lines to `~/code/experiments/raven/logs/phone.jsonl` and records a structured `phone/log_upload` event in `~/code/experiments/raven/logs/events.jsonl`. `python3 ~/code/experiments/raven/diagnose.py` uses that evidence alongside the Mac pipeline state.
+The app sends at most the newest 500 lines in one request. On HTTP 200 it advances the persisted byte offset; failures are silent and retried at the next foreground upload opportunity. The Mac appends the lines to `$RAVEN_HOME/logs/phone.jsonl` and records a structured `phone/log_upload` event in `$RAVEN_HOME/logs/events.jsonl`. `raven diagnose` uses that evidence alongside the Mac pipeline state.
 
 Uploads are diagnostic only. They do not keep the audio session alive and do not control playback.
 

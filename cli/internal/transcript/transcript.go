@@ -1,6 +1,6 @@
-// Package transcript appends user and Claude lines to spoken.jsonl, matching
-// transcript_user.py and transcript_add.py. The last 200 lines are kept and
-// writes are flocked so prompts and replies cannot clobber one another.
+// Package transcript appends user and Claude lines to spoken.jsonl. The last
+// 200 lines are kept and writes are flocked so prompts and replies cannot
+// clobber one another.
 package transcript
 
 import (

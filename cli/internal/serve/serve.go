@@ -146,7 +146,7 @@ func inheritedListener(raw string) (net.Listener, error) {
 		if err != nil || fd < 0 {
 			return nil, fmt.Errorf("serve: invalid inherited fd %q", value)
 		}
-		file := os.NewFile(uintptr(fd), "raven-serve-parity")
+		file := os.NewFile(uintptr(fd), "raven-serve-listener")
 		connection, err := net.FileConn(file)
 		_ = file.Close()
 		if err != nil {
@@ -180,7 +180,7 @@ func (l *connListener) Close() error {
 }
 
 func (l *connListener) Addr() net.Addr {
-	return localAddr("raven-serve-parity")
+	return localAddr("raven-serve-listener")
 }
 
 type localAddr string

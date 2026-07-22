@@ -1,6 +1,5 @@
 // Package diagnose reports Raven's live process, stream, queue, and event-log
-// health. Its metric definitions and presentation mirror the Python
-// diagnose.py in the Raven runtime home (~/code/experiments/raven).
+// health, and exits non-zero when the pipeline is not serving audio.
 package diagnose
 
 import (
@@ -29,7 +28,7 @@ const (
 	reset  = "\033[0m"
 )
 
-// BackendCount preserves Counter's first-seen ordering from diagnose.py.
+// BackendCount preserves first-seen ordering.
 type BackendCount struct {
 	Backend string
 	Count   int
@@ -160,7 +159,7 @@ func report(home string, sinceMin int, out io.Writer, now time.Time) {
 }
 
 // Aggregate reads JSONL event records at or after cutoff and applies the exact
-// counters used by diagnose.py. Malformed and non-object lines are skipped.
+// counters used by the report. Malformed and non-object lines are skipped.
 func Aggregate(r io.Reader, cutoff float64) Metrics {
 	var metrics Metrics
 	backendIndex := map[string]int{}

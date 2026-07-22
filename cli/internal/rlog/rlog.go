@@ -1,6 +1,6 @@
-// Package rlog appends structured events to logs/events.jsonl in the same shape
-// as ravenlog.py, so the Go hook and the Python synthd/writer share one log that
-// diagnose.py reads. One JSON object per line: {ts, comp, event, ...fields}.
+// Package rlog appends structured events to logs/events.jsonl — the single log
+// the Go commands and the Python synthd share, and the one `raven diagnose`
+// reads. One JSON object per line: {ts, comp, event, ...fields}.
 package rlog
 
 import (

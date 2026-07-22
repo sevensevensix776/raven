@@ -1,6 +1,6 @@
 // Package write produces Raven's uninterrupted 24 kHz mono s16le timeline.
 // ffmpeg remains responsible for PCM generation and decoding; this package
-// preserves writer.sh's queue selection, listener gate, and emit sequencing.
+// owns queue selection, the listener gate, and emit sequencing.
 package write
 
 import (
@@ -41,7 +41,7 @@ type writer struct {
 }
 
 // Run validates the write command and then emits PCM forever, exactly as
-// writer.sh does. stdout is normally os.Stdout, wired to pcm.fifo by start.sh.
+// the writer does. stdout is normally os.Stdout, wired to pcm.fifo by start.sh.
 func Run(args []string, stdout io.Writer) error {
 	if len(args) != 0 {
 		return fmt.Errorf("write: unexpected arguments: %s", strings.Join(args, " "))
@@ -103,7 +103,7 @@ func (w *writer) emitClip(clip string) {
 	caption := stem + ".caption.json"
 
 	// This pink pre-roll is deliberately emitted before transcript/log updates,
-	// matching writer.sh and waking car amplifiers before the first word.
+	// waking car amplifiers before the first word.
 	w.runFFmpeg([]string{
 		"-loglevel", "quiet", "-f", "lavfi", "-i", "anoisesrc=r=24000:c=pink:a=0.002:d=0.35",
 		"-f", "s16le", "-ar", "24000", "-ac", "1", "-acodec", "pcm_s16le", "-",
@@ -219,7 +219,7 @@ func pickNextClip(queue string, now time.Time, synthdUp func() bool) string {
 		if err == nil && now.Sub(info.ModTime()) >= textMinAge {
 			return path
 		}
-		// writer.sh examines only the oldest text file. A fresh oldest item
+		// The writer examines only the oldest text file. A fresh oldest item
 		// holds later text items even if their mtimes are unusual.
 		return ""
 	}

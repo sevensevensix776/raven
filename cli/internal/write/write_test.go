@@ -106,7 +106,7 @@ func TestListenerLiveGate(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !listenerLive(heartbeat, now) {
-		t.Fatal("future heartbeat must be treated as live, matching writer.sh")
+		t.Fatal("future heartbeat must be treated as live")
 	}
 }
 

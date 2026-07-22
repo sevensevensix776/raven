@@ -1,6 +1,6 @@
-// Package hook ports speak-reply.sh: read a Claude Code hook payload on stdin,
-// maintain the channel registry, and (for the selected channel's Stop) queue the
-// reply for synthesis. Pure Go, no subprocesses — the whole point of the port.
+// Package hook implements Raven's Claude Code hook: read a hook payload on
+// stdin, maintain the channel registry, and — for the selected channel's Stop,
+// when the tailer is not running — queue the reply for synthesis.
 package hook
 
 import (

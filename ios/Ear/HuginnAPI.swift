@@ -217,7 +217,7 @@ final class HuginnAPI: ObservableObject {
         .appendingPathComponent("EarPlayback.log")
 
     /// Ship only new log bytes (since a persisted offset) to the Mac, so both
-    /// sides of the pipeline land in one place for `diagnose.py`.
+    /// sides of the pipeline land in one place for `raven diagnose`.
     func uploadLog() async {
         let key = "logUploadOffset"
         let offset = UInt64(max(0, UserDefaults.standard.integer(forKey: key)))

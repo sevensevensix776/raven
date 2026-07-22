@@ -1,12 +1,10 @@
-// Package clean ports the reply-cleaning sed/tr pipeline from speak-reply.sh
-// into a pure, testable function. The bash was:
+// Package clean turns a Claude Code reply into speakable text. Fenced code
+// blocks are dropped entirely, inline code and markdown punctuation become
+// spaces, long filesystem paths collapse to "that path", and whitespace runs
+// are folded so the voice does not pause on layout.
 //
-//	sed -e '/^[[:space:]]*```/,/^[[:space:]]*```/d'   # drop fenced code blocks
-//	    -e 's/`[^`]*`/ /g'                            # inline code -> space
-//	    -e 's/[*_#>|]//g'                             # strip markdown punct
-//	    -e 's|/[A-Za-z0-9._/-]\{12,\}| that path |g'  # long paths -> " that path "
-//	| tr -s ' \n' ' '                                 # collapse space/newline runs
-//	| head -c cap                                     # cap (bytes; 0 = unlimited)
+// Reply additionally rewrites symbols the TTS voice mispronounces. Display
+// keeps them, because the on-screen transcript should stay readable.
 package clean
 
 import (

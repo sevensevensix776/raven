@@ -1,7 +1,6 @@
-// Package state ports the channels.json + selection.json registry logic from
-// speak-reply.sh's Python block, under the same .state.lock flock so a phone
-// pin and a UserPromptSubmit can't tear each other's state. Output JSON is
-// byte-compatible with the Python writer (same keys, order, compact form).
+// Package state owns the channels.json + selection.json registry. Every read
+// and write is serialized on the .state.lock flock, so a phone pin and a
+// UserPromptSubmit arriving together cannot tear each other's state.
 package state
 
 import (

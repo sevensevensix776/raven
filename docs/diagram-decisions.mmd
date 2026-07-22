@@ -30,14 +30,14 @@ flowchart TD
     DUCK["Mix / duck other audio<br/>risk of drive-long attenuation"]
 
     LANG{"Where is the runtime boundary?"}
-    GO["Go: hook + serve + write + diagnose<br/>~1 ms hook startup"]
+    GO["Go: hook + tail + serve<br/>+ write + diagnose"]
     PY["Python: warm synthd only<br/>Kokoro / mlx-audio boundary"]
     BASH["Bash + heredoc orchestration<br/>quoting and installed-source drift"]
 
     DELIVERY{"How much and how soon?"}
-    WHOLE["Uncapped full replies<br/>whole-reply synthesis today"]
+    WHOLE["Uncapped replies · per-block<br/>narration during the turn"]
     CAP["Character cap<br/>fast but arbitrary mid-sentence cuts"]
-    SENTENCE["Next: sentence-streamed synthesis<br/>subscription-safe fast first word"]
+    SENTENCE["Next: sentence-streamed synthesis<br/>subscription-safe faster first word"]
     TOKEN["Token streaming<br/>ruled out on subscription"]
 
     NEED --> BOUNDARY

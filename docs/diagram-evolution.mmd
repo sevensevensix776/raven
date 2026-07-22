@@ -6,10 +6,10 @@ flowchart LR
     A["Phase 4<br/>Stop hook → Kokoro → continuous HLS<br/>Tailscale → native iPhone player"]
     PROOF["First proof<br/>Playback survives background + screen-off"]
     B["Phase 5<br/>Driving-led build-out<br/>Channels, transcript, mute, catch-up"]
-    G["Phase 6<br/>Go migration<br/>hook + serve + write + diagnose"]
+    G["Phase 6<br/>Go migration<br/>hook + serve + write + diagnose + tail"]
     BUGS["Phase 7<br/>Live corrections<br/>double-speak · exit 137 · prompt pollution"]
-    NEXT["Phase 8<br/>Current frontier<br/>sentence-streamed synthesis"]
-    LATER["Later / higher risk<br/>latest-wins · sentence cuts · live narration"]
+    NEXT["Phase 8<br/>Live narration shipped<br/>speak blocks mid-turn, not just at Stop"]
+    LATER["Later / higher risk<br/>audible state · barge-in<br/>· streamed synthesis"]
 
     P0 --> P1 --> V1
     V1 -->|"delete unnecessary mic ownership"| R

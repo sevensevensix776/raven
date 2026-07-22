@@ -1,29 +1,32 @@
 flowchart TB
   subgraph MAC["🖥️  Mac (always on, on the tailnet)"]
     direction TB
-    HOOK["Stop hook<br/>speak-reply.sh"]:::start
+    TAIL["raven tail<br/>follows the transcript<br/>queues completed blocks"]:::start
+    HOOK["raven hook<br/>Stop fallback ·<br/>yields if tailer is live"]
     GATE{"selected channel?<br/>selection.json"}:::decide
     QUEUE["queue/&lt;id&gt;.txt<br/>+ .caption.json"]
     SYN["synthd.py<br/>Kokoro-82M · af_heart"]:::work
     WAV["queue/&lt;id&gt;.wav"]
-    WRITER["writer.sh<br/>comfort-noise floor<br/>+ clip mux"]:::work
-    ENC["ffmpeg -re<br/>→ HLS segments"]
-    SRV["server.py<br/>/channels /transcript<br/>/active /health /log"]
-    LOG["ravenlog → events.jsonl<br/>diagnose.py"]
+    WRITER["raven write<br/>comfort-noise floor<br/>+ clip mux"]:::work
+    ENC["ffmpeg -re<br/>→ 1s HLS segments"]
+    SRV["raven serve<br/>/channels /transcript<br/>/active /health /log"]
+    LOG["events.jsonl<br/>raven diagnose"]
   end
 
   subgraph NET["🔒 Tailscale"]
-    TS["100.64.0.1:8080<br/>HLS + control API"]
+    TS["tailnet IP · port 8080<br/>HLS + control API"]
   end
 
   subgraph PHONE["📱 iPhone (Raven)"]
     direction TB
     AVP["AVPlayer · live edge<br/>non-mixable .playback"]:::work
     UI["channel picker · transcript<br/>· mute · Now Playing/CarPlay"]
-    EAR["Asif's ear<br/>over CarPlay"]:::done
+    EAR["the driver's ear<br/>over CarPlay"]:::done
   end
 
-  CC["Claude Code turn ends"]:::start --> HOOK
+  CC["Claude Code writes a<br/>completed text block"]:::start --> TAIL
+  FIN["turn ends (Stop)"]:::start --> HOOK
+  TAIL --> GATE
   HOOK --> GATE
   GATE -- "no: other channel" --> DROP["dropped (silent)<br/>logged gate_skip"]
   GATE -- "yes" --> QUEUE
@@ -32,5 +35,5 @@ flowchart TB
   AVP --> UI --> EAR
   SYN -. "say fallback on error" .-> WRITER
   WRITER -. "emit / preempt / skip" .-> LOG
-  HOOK -. "queued" .-> LOG
+  TAIL -. "queued" .-> LOG
   UI -. "pin channel · upload log" .-> SRV
