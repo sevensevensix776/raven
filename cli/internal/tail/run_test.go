@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"raven-go/internal/state"
 	"strconv"
 	"testing"
 )
@@ -102,5 +103,59 @@ func TestPruneQueue_NoSelectionKeepsSessions(t *testing.T) {
 	pruneQueue(home, "", 10)
 	if !present(q, 300) || !present(q, 301) {
 		t.Fatalf("with no selection, session-based dropping must not happen")
+	}
+}
+
+// The rule that matters most on a drive: once you reply on a thread, everything
+// Claude queued before that reply is superseded. It is not merely stale — it
+// narrates a conversation you have already moved past. This holds *within one
+// session*, independent of any channel switch or backlog pressure.
+func TestPruneQueue_DropsBlocksSupersededByUserReply(t *testing.T) {
+	home, q := newQueue(t)
+	seedBlock(t, q, 100, "S") // queued before the user replied
+	seedBlock(t, q, 101, "S")
+
+	// The user speaks: watermark lands between the old and new blocks.
+	wm := state.SetPromptWatermark(home, "S")
+	if wm == 0 {
+		t.Fatal("watermark must be recorded for a real session")
+	}
+
+	seedBlock(t, q, wm+1, "S") // Claude's reply to the new prompt
+	seedBlock(t, q, wm+2, "S")
+
+	pruneQueue(home, "S", 10) // generous keep — only the watermark should act
+
+	if present(q, 100) || present(q, 101) {
+		t.Fatalf("blocks queued before the user's reply must not still be spoken")
+	}
+	if !present(q, wm+1) || !present(q, wm+2) {
+		t.Fatalf("blocks generated after the reply must survive")
+	}
+}
+
+// No watermark (the user has never spoken in this session) must not drop anything.
+func TestPruneQueue_NoWatermarkKeepsEverything(t *testing.T) {
+	home, q := newQueue(t)
+	seedBlock(t, q, 300, "S")
+	seedBlock(t, q, 301, "S")
+
+	pruneQueue(home, "S", 10)
+
+	if !present(q, 300) || !present(q, 301) {
+		t.Fatalf("with no user turn recorded, nothing is superseded")
+	}
+}
+
+// A watermark for one session must not silence another session's audio.
+func TestPruneQueue_WatermarkIsPerSession(t *testing.T) {
+	home, q := newQueue(t)
+	wm := state.SetPromptWatermark(home, "OTHER") // user replied in a different session
+	seedBlock(t, q, wm-10, "S")                   // older than that watermark, but ours
+
+	pruneQueue(home, "S", 10)
+
+	if !present(q, wm-10) {
+		t.Fatalf("a reply in another session must not supersede this one's narration")
 	}
 }

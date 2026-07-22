@@ -83,6 +83,20 @@ func Run(stdin io.Reader) {
 
 	switch event {
 	case "UserPromptSubmit":
+		// The user speaking supersedes everything queued before this moment: they
+		// have replied on this thread, so narration of what came earlier describes
+		// a conversation that has already moved on. Record a watermark and the
+		// tailer drops those clips on its next pass (~300ms). System-injected
+		// messages are excluded — a task notification is not the user talking, and
+		// must not silence real narration.
+		if !isSystemInjected(rawText) {
+			if unlock, err := state.Lock(home); err == nil {
+				state.SetPromptWatermark(home, session)
+				unlock()
+			} else {
+				state.SetPromptWatermark(home, session)
+			}
+		}
 		// Record the prompt in the transcript (screen only) for the selected
 		// channel — the registry above already made it active in follow mode.
 		// Skip harness-injected messages (task notifications, system reminders):

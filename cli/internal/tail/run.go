@@ -37,7 +37,11 @@ import (
 // dropped, so the driver hears near-current progress instead of falling minutes
 // behind. Tunable; lower = fresher but skips more, higher = more complete but
 // laggier on long turns.
-const backlogKeep = 4
+//
+// Held at 2 (plus whatever is already playing) because the common failure on a
+// drive is hearing too much, not too little — a chatty turn would otherwise
+// leave several blocks of narration owed to you well after they mattered.
+const backlogKeep = 2
 
 // caption mirrors the hook's queue caption so the phone transcript renders live-
 // narrated blocks identically to Stop-hook replies.
@@ -117,12 +121,17 @@ func Run(args []string) error {
 	}
 }
 
-// pruneQueue keeps the speech queue tight and on the selected channel. Two jobs,
-// run every poll:
+// pruneQueue keeps the speech queue tight, current, and on the selected channel.
+// Three jobs, run every poll:
 //
 //   - Channel switch: drop any queued block whose caption belongs to a session
 //     other than `selected`, so switching channels cuts the old session's audio
 //     instead of draining its backlog first.
+//   - Superseded by your reply: drop any block stamped before the user's most
+//     recent turn in this session. Once you have replied on a thread, narration
+//     of what came earlier is not merely late — it describes a conversation that
+//     has already moved on. This applies within a single session and regardless
+//     of whether you typed or dictated. See state.SetPromptWatermark.
 //   - Backlog: cap the selected session's own unplayed blocks to the newest
 //     `keep`, dropping the stale middle.
 //
@@ -150,12 +159,21 @@ func pruneQueue(home, selected string, keep int) {
 			}
 		}
 	}
+	// The user's most recent turn in the selected session. Anything queued before
+	// it is superseded — see state.SetPromptWatermark.
+	watermark := state.PromptWatermark(home, selected)
+
 	var mine []int64
-	dropped := 0
+	dropped, stale := 0, 0
 	for stamp, s := range sess {
 		if selected != "" && s != "" && s != selected {
 			removeStamp(q, stamp) // a channel you've switched away from
 			dropped++
+			continue
+		}
+		if watermark > 0 && stamp < watermark {
+			removeStamp(q, stamp) // you replied; this describes the conversation before that
+			stale++
 			continue
 		}
 		mine = append(mine, stamp)
@@ -167,8 +185,10 @@ func pruneQueue(home, selected string, keep int) {
 			dropped++
 		}
 	}
-	if dropped > 0 {
-		rlog.Log(home, "tail", "queue_pruned", map[string]any{"dropped": dropped, "keep_session": short(selected)})
+	if dropped > 0 || stale > 0 {
+		rlog.Log(home, "tail", "queue_pruned", map[string]any{
+			"dropped": dropped, "superseded": stale, "keep_session": short(selected),
+		})
 	}
 }
 
