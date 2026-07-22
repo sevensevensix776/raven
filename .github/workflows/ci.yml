@@ -9,9 +9,8 @@ permissions:
   contents: read
 
 jobs:
-  go:
-    # macOS is the platform Raven targets. The code cross-compiles to Linux, but
-    # the tests exercise flock and filesystem semantics on the real target.
+  ci:
+    # Raven is a macOS product. One job, one platform, no cross-platform theatre.
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,7 +18,6 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25'
-          cache-dependency-path: cli/go.sum
 
       - name: gofmt
         working-directory: cli
@@ -54,24 +52,20 @@ jobs:
             exit 1
           fi
 
-  docs:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
       - name: Markdown links resolve
-        shell: bash
-        # Local-file links only, so this is deterministic and needs no network.
-        # Documentation rot is this repository's most common regression: a single
-        # pass fixed roughly fifteen stale or broken links, and nothing prevented
-        # them. Anchors are stripped before the existence check.
+        # Local-file links only, so this needs no network and cannot flake.
+        # Documentation rot is this repo's most common regression.
+        #
+        # The `|| true` is load-bearing: Actions runs this with `-eo pipefail`,
+        # and a markdown file containing no links at all makes the leading grep
+        # exit 1, which would kill the step before any link is checked.
         run: |
           rc=0
           while IFS= read -r file; do
             dir="$(dirname "$file")"
-            bad="$(grep -ohE '\]\([^)#][^)]*\)' "$file" 2>/dev/null \
+            bad="$( { grep -ohE '\]\([^)#][^)]*\)' "$file" || true; } \
               | sed 's/^](//; s/)$//' \
-              | grep -vE '^(https?|mailto):' \
+              | { grep -vE '^(https?|mailto):' || true; } \
               | while IFS= read -r link; do
                   target="${link%%#*}"
                   [ -z "$target" ] && continue
