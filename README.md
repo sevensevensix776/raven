@@ -53,11 +53,12 @@ The transcript is committed when the writer begins emitting a reply—not when C
 | `synthd.py` | Keeps Kokoro-82M warm, synthesizes queued text, optionally summarizes, and falls back to `say` on synthesis errors. |
 | `raven write` | Emits an endless PCM timeline, chooses ready audio oldest-first, supplies the idle floor and speech pre-roll, and records transcript/emission events. `writer.sh` is retained for parity/rollback. |
 | persistent `ffmpeg -re` | Converts the FIFO's real-time PCM into the single live HLS timeline. |
-| `raven serve` | Serves HLS and the tailnet control, transcript, health, and phone-log API on `100.64.0.1:8080`. |
+| `raven serve` | Serves HLS and the tailnet control, transcript, health, and phone-log API on the address `RAVEN_BIND` selects. |
+| `raven tail` | Live narration: watches the selected session's transcript and queues each completed text block *during* the turn, keeping the queue on the selected channel. Gated by `LIVE_NARRATION`. |
 | Raven for iPhone | Plays the live stream, selects a channel, displays the spoken transcript, mutes locally, and uploads playback evidence. |
 | `ravenlog.py` | Appends structured Mac-side events to `logs/events.jsonl`. |
 | `raven diagnose` | Combines PID, heartbeat, queue, synthesis, selection, and uploaded-phone-log evidence into one verdict. |
-| `start.sh`, `stop.sh`, `spawn.py` | Start and stop four detached process groups without tying their lifetime to the launching shell. |
+| `start.sh`, `stop.sh`, `spawn.py` | Start and stop the five detached process groups without tying their lifetime to the launching shell. |
 
 ## Load-bearing invariants
 
