@@ -212,3 +212,7 @@ The API has no application-level authentication. Its boundary is the Tailscale a
 - **Character caps are blunt.** Any positive `MAX_SPOKEN_CHARS` value cuts bytes, not sentences. Keep it at `0` unless a hard cap is more important than a clean ending.
 - **Raven is tailnet-specific, and you configure the address once.** There is no service discovery and no in-app settings screen. The Mac's listen address comes from `RAVEN_BIND` (see [First-time setup](#first-time-setup)) and the iPhone app is built against `RAVEN_HOST`; both ship with safe placeholder defaults, so a fresh clone binds loopback until you point it at your own Tailscale address.
 - **The Mac orchestration migration is complete.** All five subcommands—`raven hook`, `raven serve`, `raven write`, `raven diagnose`, and `raven tail`—are implemented in Go and the live pipeline uses them. `synthd.py` intentionally stays Python at the Kokoro/`mlx-audio` boundary. The Bash/Python predecessors remain as parity fixtures and rollback paths. Build/install the Go binary with [`cli/install.sh`](cli/install.sh), not `cp` over the live executable: in-place replacement can make new macOS execs die with SIGKILL while long-lived Raven processes still map the old binary. See the [cli README](cli/README.md).
+
+## License
+
+MIT — see [LICENSE](LICENSE).

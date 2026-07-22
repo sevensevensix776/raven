@@ -1,0 +1,14 @@
+# Copy to build.local.sh (gitignored) and fill in your values.
+
+# Your connected iPhone:  xcrun devicectl list devices
+export RAVEN_DEVICE_ID='PASTE-DEVICE-IDENTIFIER'
+
+# Bundle id for your build — must be unique to you.
+export RAVEN_BUNDLE_ID='com.example.Ear'
+
+# Apple Developer team + App Store Connect API key.
+# Keep the .p8 OUTSIDE this repository.
+export RAVEN_TEAM_ID='YOUR_TEAM_ID'
+export RAVEN_KEY_PATH="$HOME/.config/appstore/AuthKey_XXXXXXXXXX.p8"
+export RAVEN_KEY_ID='YOUR_KEY_ID'
+export RAVEN_ISSUER_ID='YOUR_ISSUER_ID'

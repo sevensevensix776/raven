@@ -22,3 +22,4 @@ tail-state/
 .tail.pid
 config.local.sh
 ios/raven-host.local
+ios/build.local.sh

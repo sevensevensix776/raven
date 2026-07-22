@@ -41,49 +41,30 @@ The build is fully command-line driven; Xcode.app supplies the toolchain but the
 | Development team | `YOUR_TEAM_ID` |
 | Bundle ID | `com.example.Ear` |
 
-Connect and unlock the iPhone, trust the Mac if prompted, then run:
+### One-time setup
+
+Create the two gitignored local files — your Tailscale address and your signing details. Neither ever enters the repository.
 
 ```bash
-cd ~/code/experiments/raven/ios
-
-# One-time: point the app at your Mac's Tailscale IP. Kept out of git; baked into
-# the build via the RAVEN_HOST setting → Info.plist "RavenHost" → RavenConfig.host.
-cp raven-host.local.example raven-host.local   # then edit to <your-mac-tailscale-ip>:8080
-
-xcrun devicectl list devices
-export RAVEN_DEVICE_ID='PASTE-DEVICE-IDENTIFIER-HERE'
-export RAVEN_DERIVED_DATA="$PWD/build/DerivedData"
-export RAVEN_APP_PATH="$RAVEN_DERIVED_DATA/Build/Products/Release-iphoneos/Ear.app"
-
-# Signing values below are placeholders — use your own Apple Developer team and
-# App Store Connect API key.
-xcodebuild \
-  -project Ear.xcodeproj \
-  -scheme Ear \
-  -configuration Release \
-  -destination "id=$RAVEN_DEVICE_ID" \
-  -derivedDataPath "$RAVEN_DERIVED_DATA" \
-  RAVEN_HOST="$(cat raven-host.local)" \
-  DEVELOPMENT_TEAM=YOUR_TEAM_ID \
-  PRODUCT_BUNDLE_IDENTIFIER=com.example.Ear \
-  CODE_SIGN_STYLE=Automatic \
-  -allowProvisioningUpdates \
-  -allowProvisioningDeviceRegistration \
-  -authenticationKeyPath /path/to/AuthKey_XXXXXXXXXX.p8 \
-  -authenticationKeyID YOUR_KEY_ID \
-  -authenticationKeyIssuerID YOUR_ISSUER_ID \
-  clean build
-
-codesign --verify --deep --strict --verbose=2 "$RAVEN_APP_PATH"
-xcrun devicectl device install app \
-  --device "$RAVEN_DEVICE_ID" \
-  "$RAVEN_APP_PATH"
-xcrun devicectl device process launch \
-  --device "$RAVEN_DEVICE_ID" \
-  com.example.Ear
+cd ios
+cp raven-host.local.example raven-host.local   # -> <your-mac-tailscale-ip>:8080
+cp build.local.sh.example  build.local.sh      # device id, bundle id, team, API key
+xcrun devicectl list devices                   # to fill in RAVEN_DEVICE_ID
 ```
 
-The key file is a signing credential. Keep it at the configured private path; do not copy it into this repository or a build artifact.
+### Every build after that
+
+Connect and unlock the iPhone, trust the Mac if prompted, then:
+
+```bash
+./build-install.sh
+```
+
+It builds a signed Release, verifies the signature, prints the host baked into the app, installs to the device, and launches it.
+
+Using the script rather than a hand-typed `xcodebuild` matters for one specific reason: the invocation carries ~15 flags, and getting `PRODUCT_BUNDLE_IDENTIFIER` wrong installs a **second** app instead of updating the one on your phone. The script always passes the bundle id from `build.local.sh`, so the checked-in project can keep a generic default safely.
+
+The `.p8` signing key is a credential: keep it outside this repository, and never copy it into a build artifact.
 
 ## Why playback survives in the background
 
