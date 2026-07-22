@@ -20,6 +20,20 @@ var (
 	mdPunct    = regexp.MustCompile(`[*_#>|]`)
 	longPath   = regexp.MustCompile(`/[A-Za-z0-9._/-]{12,}`)
 	spaceRuns  = regexp.MustCompile(`[ \n]+`)
+	tildeNum   = regexp.MustCompile(`~(\d)`) // "~5" -> "about 5" (approximation)
+)
+
+// spokenSubst rewrites characters Kokoro reads badly into how they should sound,
+// or drops them. THIS IS THE PLACE to fix speech pronunciation: whenever you
+// catch the voice mangling a symbol, add a `"from", "to"` pair here (and a case
+// to clean_test.go). Applied only to spoken text (Reply), never to the readable
+// on-screen transcript (Display), which keeps its symbols.
+var spokenSubst = strings.NewReplacer(
+	// Arrows are notation, not speech — drop them.
+	"←", " ", "→", " ", "↑", " ", "↓", " ", "↔", " ",
+	"⟵", " ", "⟶", " ", "⇐", " ", "⇒", " ", "↝", " ", "➜", " ",
+	// Standalone tilde (after the ~N "about N" pass) and bullets Kokoro fumbles.
+	"~", " ", "•", " ", "·", " ",
 )
 
 // Reply cleans an assistant reply for speech. cap is a byte cap; cap <= 0 means
@@ -32,6 +46,8 @@ func Reply(text string, cap int) string {
 	text = inlineCode.ReplaceAllString(text, " ")
 	text = mdPunct.ReplaceAllString(text, "")
 	text = longPath.ReplaceAllString(text, " that path ")
+	text = tildeNum.ReplaceAllString(text, "about $1") // "~5 min" -> "about 5 min"
+	text = spokenSubst.Replace(text)                   // arrows/tilde/bullets Kokoro fumbles
 	text = spaceRuns.ReplaceAllString(text, " ")
 	if cap > 0 && len(text) > cap {
 		text = text[:cap]

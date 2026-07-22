@@ -21,6 +21,12 @@ func TestReply(t *testing.T) {
 			0,
 			"Here is code: Done.",
 		},
+		{"tilde approx", "waits ~5 minutes", 0, "waits about 5 minutes"},
+		{"standalone tilde", "a ~ b", 0, "a b"},
+		{"left arrow", "A ← B", 0, "A B"},
+		{"right arrow", "deploy → prod", 0, "deploy prod"},
+		{"squiggle arrow", "fires ↝ after deploy", 0, "fires after deploy"},
+		{"bullet dropped", "one • two", 0, "one two"},
 		{"cap bytes", "abcdefghij", 5, "abcde"},
 		{"cap zero unlimited", "abcdefghij", 0, "abcdefghij"},
 	}
