@@ -20,7 +20,7 @@ These are smaller but still deliberate:
 - **One owner of the car route over audio mixing.** A non-mixable `.playback` session makes Raven the Now Playing app and avoids drive-long ducking, but starting Spotify can take the session. See [ADR 0006](adr/0006-non-mixable-playback.md).
 - **Private fixed topology over public reachability.** Tailscale eliminates a relay and application authentication layer, but both devices must remain on the tailnet and the current iPhone build hard-codes the Mac address. See [ADR 0007](adr/0007-tailscale-transport.md).
 - **Compatibility over a clean rewrite.** The Go port kept file formats and behavior compatible with the Bash/Python path and used parity tests. That preserved rollback and reduced migration risk, but retained some byte-cap and local-filesystem conventions. See [ADR 0009](adr/0009-go-orchestration-python-synthesis.md).
-- **HLS durability over conversational latency.** Two-second segments and `AVPlayer` buffering produce roughly 4–8 seconds of downstream delay, but the continuous live stream survives background playback and car-route changes more reliably than per-reply file handoffs.
+- **HLS durability over conversational latency.** One-second segments and `AVPlayer` buffering produce roughly 3–5 seconds of downstream delay, but the continuous live stream survives background playback and car-route changes more reliably than per-reply file handoffs.
 
 ## What these choices rule out
 

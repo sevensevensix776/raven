@@ -36,3 +36,9 @@ Maintain one endless PCM timeline and one persistent HLS encoder:
 - **No idle output.** Rejected because closing or starving the FIFO can end or stall the stream.
 
 See the [README invariants](../../README.md#load-bearing-invariants), [`../diagram-decisions.mmd`](../diagram-decisions.mmd), and [`../INTERRUPT_DESIGN.md`](../INTERRUPT_DESIGN.md).
+
+> **Later (2026-07-21):** segment length was tuned from two seconds to one, with
+> an eight-segment playlist, to cut live-edge latency roughly in half; measured
+> downstream delay is now about 3–5 seconds. The structure this ADR decided —
+> one persistent encoder, one FIFO, a continuous comfort-noise floor, no end
+> marker — is unchanged.

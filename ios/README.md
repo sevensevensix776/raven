@@ -141,7 +141,7 @@ The service base URL comes from the `RAVEN_HOST` build setting → `Info.plist` 
 ## Limits
 
 - **Audio continues in the background; API polling does not.** Transcript, channel, and phone-log refresh tasks run only while the SwiftUI scene is active.
-- **Latency is expected.** The Mac's two-second HLS segments and `AVPlayer` buffering put playback roughly 4–8 seconds behind the Claude hook.
+- **Latency is expected.** The Mac's one-second HLS segments and `AVPlayer` buffering put playback roughly 3–5 seconds behind the Claude hook.
 - **The host is fixed.** Changing the Mac's tailnet IP requires a code and `Info.plist` update plus a rebuild.
 - **HTTP has no app-layer authentication.** Reachability is limited by the Tailscale network boundary.
 - **Mute is local.** It does not pause the player, stop HLS requests, or prevent the Mac from treating the phone as a live listener.

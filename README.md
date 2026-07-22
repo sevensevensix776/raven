@@ -154,7 +154,7 @@ tail -100 ~/code/experiments/raven/logs/phone.jsonl
 tail -100 ~/code/experiments/raven/.detached.log
 ```
 
-`raven diagnose` verifies all four process PIDs, listener heartbeat age, queue depth, channel selection, recent synthesis backends and latency, gate skips, fallback errors, and uploaded phone evidence. `EarPlayback.log` progress is strong evidence that media time advanced in `AVPlayer`; it is not proof that sound reached the car speakers.
+`raven diagnose` verifies all five process PIDs, listener heartbeat age, queue depth, channel selection, recent synthesis backends and latency, gate skips, fallback errors, and uploaded phone evidence. `EarPlayback.log` progress is strong evidence that media time advanced in `AVPlayer`; it is not proof that sound reached the car speakers.
 
 ## Configuration
 
@@ -202,7 +202,7 @@ The API has no application-level authentication. Its boundary is the Tailscale a
 
 ## Limits and gotchas
 
-- **HLS is not conversationally instant.** Two-second segments plus the live playlist and `AVPlayer` buffer produce roughly 4–8 seconds of end-to-end playback latency.
+- **HLS is not conversationally instant.** One-second segments plus the live playlist and `AVPlayer` buffer produce roughly 3–5 seconds of end-to-end playback latency. That is a fixed delivery cost, not synthesis time — synthesis is about a second. Removing it means replacing HLS with a raw stream into the app; see [`docs/FUTURE_WORK.md`](docs/FUTURE_WORK.md).
 - **The audible idle floor is deliberate.** `noise` is the mode proven to preserve background playback and wake the car audio path. `IDLE_FLOOR=silence` is implemented but has not passed the equivalent locked-phone drive test.
 - **Summarization is off and untuned.** With `SUMMARIZE=0` and `MAX_SPOKEN_CHARS=0`, a long Claude reply becomes a long spoken clip. The existing summarizer is guarded but not yet drive-tuned.
 - **Long replies have a synthesis wait (time-to-first-word).** Kokoro synthesizes the whole reply before it plays — measured ~15s for a ~2,500-char reply. The writer waits for synthd rather than racing it with `say` (that race caused double-speak; fixed). So a long reply is preceded by that much comfort-noise hiss. The necessary fix is per-sentence streaming synthesis (first sentence in ~0.3s) — see [`docs/SCOPE_STREAMING_SYNTHESIS.md`](docs/SCOPE_STREAMING_SYNTHESIS.md).

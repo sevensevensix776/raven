@@ -5,6 +5,10 @@
 > after a drive on the current pipeline. This doc is the ready-to-build design
 > from a Codex (gpt-5.6-sol) consult.
 
+> **Note (2026-07-21):** the segment-size recommendation in this document was
+> adopted — HLS now runs one-second segments with an eight-segment playlist.
+> Buffer figures written as "4–8 seconds" predate that change.
+
 ## Core principle
 Kill ONLY the per-clip decoder, NEVER the persistent HLS encoder (.ffmpeg.pid),
 the FIFO, or the HLS timeline. Bridge every decoder handoff with cached raw PCM
