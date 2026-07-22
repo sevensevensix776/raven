@@ -29,7 +29,7 @@ Freshness matters more than perfect prose continuity while driving. The cut will
 
 **Code — atomically commit the new reply, mark it latest, and change the interrupt token.**
 
-Replace the final `mv` pair in [speak-reply.sh](/Users/asifahmed/code/experiments/raven/hooks/speak-reply.sh) with:
+Replace the final `mv` pair in [speak-reply.sh](../hooks/speak-reply.sh) with:
 
 ```bash
 # Queue commit + latest-wins signal share a lock with /skip.
@@ -153,7 +153,7 @@ This prevents an old synthesis already underway from “resurrecting” after a 
 
 This is viable because the parent writer still owns the FIFO’s write descriptor, so killing the child does not send EOF downstream. Poll a generation token every 50ms, terminate the child within 200ms, and immediately write a 500ms idle block.
 
-**Code — core replacement for [writer.sh](/Users/asifahmed/code/experiments/raven/writer.sh).**
+**Code — core replacement for [writer.sh](../writer.sh).**
 
 ```bash
 #!/bin/bash
@@ -330,7 +330,7 @@ A client seek only discards buffered HLS audio. If the writer is still emitting 
 
 **Code — server endpoint.**
 
-Add to [server.py](/Users/asifahmed/code/experiments/raven/server.py):
+Add to [server.py](../server.py):
 
 ```python
 QUEUE = SPEECH / "queue"
@@ -418,7 +418,7 @@ def do_POST(self):
     # Existing /active implementation follows.
 ```
 
-Add to [HuginnAPI.swift](/Users/asifahmed/code/experiments/ear/Ear/HuginnAPI.swift):
+Add to [HuginnAPI.swift](~/code/experiments/ear/Ear/HuginnAPI.swift):
 
 ```swift
 func skip() async -> Bool {
@@ -441,7 +441,7 @@ func skip() async -> Bool {
 }
 ```
 
-Expose the existing live-edge operation in [PlaybackController.swift](/Users/asifahmed/code/experiments/ear/Ear/PlaybackController.swift):
+Expose the existing live-edge operation in [PlaybackController.swift](~/code/experiments/ear/Ear/PlaybackController.swift):
 
 ```swift
 func jumpToLiveEdge() {
@@ -451,7 +451,7 @@ func jumpToLiveEdge() {
 }
 ```
 
-Add state and a button in [EarApp.swift](/Users/asifahmed/code/experiments/ear/Ear/EarApp.swift):
+Add state and a button in [EarApp.swift](~/code/experiments/ear/Ear/EarApp.swift):
 
 ```swift
 @State private var skipInFlight = false
@@ -697,7 +697,7 @@ Freshness matters more than perfect prose continuity while driving. The cut will
 
 **Code — atomically commit the new reply, mark it latest, and change the interrupt token.**
 
-Replace the final `mv` pair in [speak-reply.sh](/Users/asifahmed/code/experiments/raven/hooks/speak-reply.sh) with:
+Replace the final `mv` pair in [speak-reply.sh](../hooks/speak-reply.sh) with:
 
 ```bash
 # Queue commit + latest-wins signal share a lock with /skip.
@@ -821,7 +821,7 @@ This prevents an old synthesis already underway from “resurrecting” after a 
 
 This is viable because the parent writer still owns the FIFO’s write descriptor, so killing the child does not send EOF downstream. Poll a generation token every 50ms, terminate the child within 200ms, and immediately write a 500ms idle block.
 
-**Code — core replacement for [writer.sh](/Users/asifahmed/code/experiments/raven/writer.sh).**
+**Code — core replacement for [writer.sh](../writer.sh).**
 
 ```bash
 #!/bin/bash
@@ -998,7 +998,7 @@ A client seek only discards buffered HLS audio. If the writer is still emitting 
 
 **Code — server endpoint.**
 
-Add to [server.py](/Users/asifahmed/code/experiments/raven/server.py):
+Add to [server.py](../server.py):
 
 ```python
 QUEUE = SPEECH / "queue"
@@ -1086,7 +1086,7 @@ def do_POST(self):
     # Existing /active implementation follows.
 ```
 
-Add to [HuginnAPI.swift](/Users/asifahmed/code/experiments/ear/Ear/HuginnAPI.swift):
+Add to [HuginnAPI.swift](~/code/experiments/ear/Ear/HuginnAPI.swift):
 
 ```swift
 func skip() async -> Bool {
@@ -1109,7 +1109,7 @@ func skip() async -> Bool {
 }
 ```
 
-Expose the existing live-edge operation in [PlaybackController.swift](/Users/asifahmed/code/experiments/ear/Ear/PlaybackController.swift):
+Expose the existing live-edge operation in [PlaybackController.swift](~/code/experiments/ear/Ear/PlaybackController.swift):
 
 ```swift
 func jumpToLiveEdge() {
@@ -1119,7 +1119,7 @@ func jumpToLiveEdge() {
 }
 ```
 
-Add state and a button in [EarApp.swift](/Users/asifahmed/code/experiments/ear/Ear/EarApp.swift):
+Add state and a button in [EarApp.swift](~/code/experiments/ear/Ear/EarApp.swift):
 
 ```swift
 @State private var skipInFlight = false

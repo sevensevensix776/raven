@@ -38,4 +38,4 @@ Port one component at a time and require behavior parity before live replacement
 - **Rewrite from a new specification without parity.** Rejected because the live file and state contracts were already working; parity was safer than reinterpretation.
 - **Use a framework or third-party Go dependencies.** Unnecessary for the small local command surface.
 
-See `~/code/experiments/raven-go/README.md` and the [current runtime component map](../../README.md#runtime-components).
+See `../../cli/README.md` and the [current runtime component map](../../README.md#runtime-components).

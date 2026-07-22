@@ -28,4 +28,4 @@ Configure `AVAudioSession` as non-mixable `.playback` with no `.mixWithOthers` a
 - **`.mixWithOthers`.** Rejected because Raven would not reliably own Now Playing and the car controls.
 - **Deactivate the session during idle gaps.** Rejected because idle continuity is load-bearing for background survival and first-word delivery; see [ADR 0003](0003-continuous-hls-comfort-noise.md).
 
-See `PlaybackController.swift` in `~/code/experiments/ear` and [`../TRADEOFFS.md`](../TRADEOFFS.md).
+See `PlaybackController.swift` in `ios/` and [`../TRADEOFFS.md`](../TRADEOFFS.md).

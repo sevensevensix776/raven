@@ -1,105 +1,89 @@
 # Raven rollback & checkpoint
 
-How to get back to a known-good state fast if a new feature breaks the live
-pipeline. Written at the checkpoint taken **before building live narration**
-(the `raven tail` process that changes who owns speaking).
+How to get back to a known-good state fast if a change breaks the live pipeline.
 
 ## The checkpoint
 
-Tag on all three repos: **`checkpoint-pre-live-narration`** (2026-07-18).
+Tag: **`checkpoint-pre-live-narration`** — the last verified state before the
+`raven tail` process changed who owns speaking.
 
-| Repo | Path | Tagged commit |
-|---|---|---|
-| raven (runtime home) | `~/code/experiments/raven` | `checkpoint-pre-live-narration` |
-| raven-go (the binary) | `~/code/experiments/raven-go` | `cd4e5e3` |
-| ear (iOS app) | `~/code/experiments/ear` | `d13af52` |
+Everything lives in **one repo**: `~/code/experiments/raven` (runtime at the root,
+plus `cli/`, `ios/`, `docs/`), pushed to a private GitHub remote with the tag on
+it. If the machine is lost you can re-clone and check the tag out; the rollback
+below is fully local and needs no network.
 
-The installed binary at this checkpoint:
-
-- `~/.local/bin/raven` sha256 `e994d2272cacd898a6ac2ebbd93e92707a2326bcada28424f1895704a2a4d04d`
-- built from raven-go `cd4e5e3`.
-
-> **Off-machine backup:** all three repos are pushed to **private** GitHub repos
-> under the `sevensevensix776` org — `raven`, `raven-go`, `ear` — via SSH
-> (`git@github.com:sevensevensix776/<name>.git`), and the
-> `checkpoint-pre-live-narration` tag is on each remote (verified: remote SHAs ==
-> local). Rollback below is fully local and needs no network, but if the machine
-> is lost you can re-clone from GitHub and `git checkout` the tag.
+> The tag predates both the monorepo merge and the history rewrite that scrubbed
+> the Tailscale IP, so its commit SHA is not the original one — the tag itself
+> still resolves and still marks the pre-live-narration state.
 
 ## Known-good baseline (what "healthy" looks like)
 
-Restore target. After any rollback, `raven diagnose` must match this shape:
+Restore target. After any rollback, `raven diagnose` should match this shape:
 
-- **4 long-lived processes:** `raven write`, `ffmpeg -re` (HLS mux), `raven serve`,
-  `synthd.py` (the venv python).
-- **`raven diagnose` → `VERDICT: HEALTHY`**, writer + synthd `OK`, Kokoro synth
-  working, `kokoro->say fallbacks: 0`.
-- **HLS advancing:** new `hls/stream*.ts` segments appear every ~2 s.
-- **serve reachable on the tailnet:** `curl http://100.64.0.1:8080/health` → `200`
-  (serve binds the Tailscale IP, *not* loopback — loopback returning `000` is
-  expected, not a fault).
+- **5 long-lived processes:** `raven write`, `ffmpeg -re` (the HLS mux),
+  `raven serve`, `synthd.py` (the venv Python), and `raven tail` (live narration).
+- **`raven diagnose` → `VERDICT: HEALTHY`**, writer + synthd `OK`, Kokoro
+  synthesizing, `kokoro->say fallbacks: 0`.
+- **HLS advancing:** new `hls/stream*.ts` segments appear every ~1 s.
+- **serve reachable:** `curl http://$RAVEN_BIND/health` → `200`. `serve` binds
+  whatever `RAVEN_BIND` is set to (your Tailscale address, from the gitignored
+  `config.local.sh`) — **not** loopback, so a request to `127.0.0.1` returning
+  `000` is expected, not a fault.
 
 ## Level 0 — the kill switch (instant, no rebuild)
 
-Live narration ships **default-off** (`LIVE_NARRATION=0`) as a separate process
-(`.tail.pid`). The existing Stop-hook speech path is untouched when the flag is
-off. So the first line of defense needs no git and no rebuild:
+Live narration is a separate process (`.tail.pid`) behind `LIVE_NARRATION` in
+`config.sh`. It is currently **on**. The Stop-hook speech path was never removed —
+only demoted to a safety net while the tailer is alive — so turning the flag off
+restores speak-on-Stop immediately, with no git and no rebuild:
 
 ```bash
-# 1. Make sure the flag is off (or remove the line entirely).
-#    edit ~/code/experiments/raven/config.sh  ->  LIVE_NARRATION=0
-# 2. Kill the tailer if it's running; do NOT restart it.
+# 1. Turn it off.
+#    edit config.sh  ->  LIVE_NARRATION=0
+# 2. Kill the tailer; do NOT restart it.
 kill "$(cat ~/code/experiments/raven/.tail.pid)" 2>/dev/null
 rm -f ~/code/experiments/raven/.tail.pid
-# 3. The Stop hook resumes owning speech immediately. Verify:
+# 3. The Stop hook resumes owning speech. Verify:
 ~/.local/bin/raven diagnose        # expect VERDICT: HEALTHY
 ```
 
-This restores today's exact behavior (speak-on-Stop) because that path was never
-removed — only demoted to a safety net while the tailer is alive.
-
-**Design contract that makes Level 0 valid** (the feature MUST honor it, or Level 0
-is a lie): the tailer is additive and flag-gated; `LIVE_NARRATION=0` reproduces
-today's Stop-only delivery byte-for-byte; the tailer has its own pidfile and never
+**The design contract that makes Level 0 valid** (any future change must honor it,
+or Level 0 is a lie): the tailer is additive and flag-gated; `LIVE_NARRATION=0`
+reproduces Stop-only delivery exactly; the tailer owns its own pidfile and never
 shares the Stop hook's producer role while the flag is off.
 
 ## Level 1 — full code rollback (git)
 
-If the feature corrupted more than the tailer (state files, hook, writer, serve),
+If something corrupted more than the tailer (state files, hook, writer, serve),
 go back to the tagged code and rebuild:
 
 ```bash
 # Stop the live pipeline.
 ~/code/experiments/raven/stop.sh
 
-# Roll each repo back to the checkpoint.
-git -C ~/code/experiments/raven    checkout checkpoint-pre-live-narration
-git -C ~/code/experiments/raven-go checkout checkpoint-pre-live-narration
-git -C ~/code/experiments/ear      checkout checkpoint-pre-live-narration   # only if the app changed
+# Roll back — one repo; cli/ and ios/ come with it.
+git -C ~/code/experiments/raven checkout checkpoint-pre-live-narration
 
-# Rebuild + reinstall the binary from the tagged source (atomic; safe while stopped).
-cd ~/code/experiments/raven-go && ./install.sh
+# Rebuild + reinstall the binary from the tagged source.
+# (Atomic + ad-hoc signed; never `cp` over the live executable.)
+cd ~/code/experiments/raven/cli && ./install.sh
 
-# Bring the pipeline back up from the runtime home.
+# Bring the pipeline back up and verify against the baseline above.
 ~/code/experiments/raven/start.sh
-
-# Verify against the baseline above.
 ~/.local/bin/raven diagnose
 ```
 
-To return to the tip of development afterward: `git -C <repo> checkout master`
-(this leaves a detached HEAD during rollback — that's expected and non-destructive;
-nothing is committed during a rollback).
+Return to the tip afterward with `git -C ~/code/experiments/raven checkout master`.
+The rollback leaves a detached HEAD — expected and non-destructive; nothing is
+committed during a rollback.
 
-> If the feature also wrote **new** durable state files (e.g. `tail-state/`,
-> stop-intent records), delete them after Level 1 so a stale format can't confuse
-> the rolled-back code:
-> `rm -rf ~/code/experiments/raven/tail-state ~/code/experiments/raven/.stop-intent*`
-> (paths TBD when the feature lands — update this line then.)
+> Rolling back **past** live narration? Delete its durable state so a stale format
+> can't confuse older code:
+> `rm -rf ~/code/experiments/raven/tail-state ~/code/experiments/raven/.tail.pid`
 
-## Why this is safe to build on
+## What never rolls back
 
-The consolidation that produced this checkpoint was verified end-to-end (live hook
-→ gate → queue → Kokoro synth; HLS on the tailnet) and the full test suite is green
-(`go test`, parity 5/5, serve/diagnose parity, writer PCM integration). Rolling back
-to `checkpoint-pre-live-narration` returns to that verified state.
+`config.local.sh` and `ios/raven-host.local` hold your machine's Tailscale
+address and are gitignored — no checkout touches them, so `serve` keeps binding
+the right address across any rollback. If they go missing, copy the `.example`
+files next to them and fill in your address.

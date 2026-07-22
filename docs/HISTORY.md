@@ -120,7 +120,7 @@ The result is one dependency-free static `raven` binary with `hook`, `serve`, `w
 
 This was a compatibility migration, not a rewrite from an idealized specification. After normalizing timestamp-derived values, the Bash hook and Go hook produced byte-identical behaviorally meaningful state across five cases. The Python and Go servers returned identical control responses and side effects. The Bash and Go writers emitted byte-identical PCM under the parity harness. The Go hook starts in roughly 1 ms rather than Python's roughly 50–100 ms, meaningful inside Claude Code's two-second hook timeout.
 
-[ADR 0009](adr/0009-go-orchestration-python-synthesis.md) records the language boundary. The implementation details and test harnesses live in the `~/code/experiments/raven-go` repository.
+[ADR 0009](adr/0009-go-orchestration-python-synthesis.md) records the language boundary. The implementation details and test harnesses live in the `cli/` repository.
 
 ## Phase 7 — Three live bugs that changed the system
 
@@ -166,8 +166,8 @@ Summarization exists behind a disabled flag and remains untuned. It addresses to
 At the end of the session, Raven was a working three-part system:
 
 - `~/code/experiments/raven` owns the Mac runtime, the Python Kokoro daemon, HLS process management, state, and operational docs.
-- `~/code/experiments/raven-go` owns the dependency-free Go orchestration binary and parity harnesses.
-- `~/code/experiments/ear` owns the native iPhone app whose internal target is `Ear` and display name is Raven.
+- `cli/` owns the dependency-free Go orchestration binary and parity harnesses.
+- `ios/` owns the native iPhone app whose internal target is `Ear` and display name is Raven.
 
 The shipped path is Stop-hook, whole-reply synthesis, continuous HLS, and native background playback. Replies are uncapped, selected by channel, and recorded in an emitted-audio transcript. The system is private to the Tailscale network and remains on the Claude.ai subscription.
 

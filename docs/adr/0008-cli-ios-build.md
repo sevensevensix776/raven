@@ -35,4 +35,4 @@ For the Mac Go binary, use `raven-go/install.sh`: build, copy to a same-filesyst
 - **Use a free personal Apple ID.** Not viable for the chosen API-key-based workflow because personal teams cannot create App Store Connect API keys.
 - **Copy a newly built Mac binary directly over the live executable.** Rejected after it invalidated the signature and silently killed hooks.
 
-See the iPhone build guide in `~/code/experiments/ear/README.md`, the Go installer in `~/code/experiments/raven-go/install.sh`, and the exit-137 account in [`../HISTORY.md`](../HISTORY.md).
+See the iPhone build guide in `../../ios/README.md`, the Go installer in `../../cli/install.sh`, and the exit-137 account in [`../HISTORY.md`](../HISTORY.md).

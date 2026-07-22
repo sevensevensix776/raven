@@ -90,7 +90,7 @@ It must **never** serialize as `null`. Raven’s server iterates this field in `
 The module currently targets Go 1.25.
 
 ```bash
-cd ~/code/experiments/raven-go
+cd ~/code/experiments/raven/cli
 go build -o raven .
 go test ./...
 go vet ./...
@@ -153,7 +153,7 @@ Append the same hook entry to each of `UserPromptSubmit`, `Stop`, and `SessionEn
   "hooks": [
     {
       "type": "command",
-      "command": "/Users/asifahmed/.local/bin/raven hook",
+      "command": "~/.local/bin/raven hook",
       "timeout": 2
     }
   ]
@@ -167,13 +167,13 @@ The entry belongs in each event’s array; preserve any other hooks already conf
 The Bash implementation is retained at `~/.claude/hooks/speak-reply.sh`. To roll back, change the Raven command in all three Claude Code event entries—`UserPromptSubmit`, `Stop`, and `SessionEnd`—from:
 
 ```text
-/Users/asifahmed/.local/bin/raven hook
+~/.local/bin/raven hook
 ```
 
 to:
 
 ```text
-bash /Users/asifahmed/.claude/hooks/speak-reply.sh
+bash ~/.claude/hooks/speak-reply.sh
 ```
 
 Keep the existing `"timeout": 2`, save `~/.claude/settings.json`, and start a fresh Claude Code session. No state migration is required: both hooks use the same files and compatible JSON formats.

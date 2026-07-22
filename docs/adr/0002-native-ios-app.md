@@ -30,4 +30,4 @@ The internal target and product remain `Ear`; the user-facing display name is Ra
 - **Retain full-duplex native v1.** Rejected by [ADR 0001](0001-voice-out-only.md); native code does not make unnecessary microphone ownership desirable.
 - **Fork an existing Claude Code mobile wrapper.** Rejected because Raven needs a narrow player, not a second Claude Code client, and wrapper maintenance carries the release-cadence risk observed in Omnara.
 
-See the iPhone repository at `~/code/experiments/ear` and the [project history](../HISTORY.md).
+See the iPhone repository at `ios/` and the [project history](../HISTORY.md).

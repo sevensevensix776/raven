@@ -2,7 +2,7 @@
 
 Raven is a native SwiftUI client for listening to Claude Code replies as a live background audio stream. It connects to the Raven service on the Mac over Tailscale, plays the continuous HLS feed through `AVPlayer`, shows the transcript of audio whose emission has begun on the Mac, and lets the driver follow or pin a Claude session. It is voice-out only: prompts still enter through Claude Code Remote Control and iOS dictation.
 
-The app's display name is **Raven**. Its Xcode target and built product are **Ear**, and its bundle identifier is `com.asifahmed.Ear`.
+The app's display name is **Raven**. Its Xcode target and built product are **Ear**, and its default bundle identifier is `com.example.Ear` (override with `PRODUCT_BUNDLE_IDENTIFIER`).
 
 ## What the app does
 
@@ -39,7 +39,7 @@ The build is fully command-line driven; Xcode.app supplies the toolchain but the
 | Key ID | `YOUR_KEY_ID` |
 | Issuer ID | `YOUR_ISSUER_ID` |
 | Development team | `YOUR_TEAM_ID` |
-| Bundle ID | `com.yourname.Ear` |
+| Bundle ID | `com.example.Ear` |
 
 Connect and unlock the iPhone, trust the Mac if prompted, then run:
 
@@ -65,7 +65,7 @@ xcodebuild \
   -derivedDataPath "$RAVEN_DERIVED_DATA" \
   RAVEN_HOST="$(cat raven-host.local)" \
   DEVELOPMENT_TEAM=YOUR_TEAM_ID \
-  PRODUCT_BUNDLE_IDENTIFIER=com.yourname.Ear \
+  PRODUCT_BUNDLE_IDENTIFIER=com.example.Ear \
   CODE_SIGN_STYLE=Automatic \
   -allowProvisioningUpdates \
   -allowProvisioningDeviceRegistration \
@@ -80,7 +80,7 @@ xcrun devicectl device install app \
   "$RAVEN_APP_PATH"
 xcrun devicectl device process launch \
   --device "$RAVEN_DEVICE_ID" \
-  com.yourname.Ear
+  com.example.Ear
 ```
 
 The key file is a signing credential. Keep it at the configured private path; do not copy it into this repository or a build artifact.
@@ -116,12 +116,12 @@ The file uses `completeUntilFirstUserAuthentication` protection, so it remains a
 With the same device and bundle variables used for installation:
 
 ```bash
-cd ~/code/experiments/ear
+cd ~/code/experiments/raven/ios
 
 xcrun devicectl device copy from \
   --device "$RAVEN_DEVICE_ID" \
   --domain-type appDataContainer \
-  --domain-identifier com.asifahmed.Ear \
+  --domain-identifier com.example.Ear \
   --source Documents/EarPlayback.log \
   --destination ./EarPlayback.log
 

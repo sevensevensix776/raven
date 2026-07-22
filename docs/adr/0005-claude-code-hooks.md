@@ -36,4 +36,4 @@ The hook is fail-silent so narration cannot block a Claude Code turn. Operationa
 - **Add a Remote Control-specific transport.** Rejected because session hooks already fire for those turns.
 - **Fork or wrap Claude Code.** Rejected because it adds release-cadence coupling without solving a missing transport.
 
-See [ADR 0011](0011-no-token-streaming.md) and the [Go hook documentation](../../../code/experiments/raven-go/README.md) when viewed in the local workspace.
+See [ADR 0011](0011-no-token-streaming.md) and the [Go hook documentation](../../cli/README.md) when viewed in the local workspace.
