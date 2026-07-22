@@ -215,6 +215,20 @@ recent synthesis backends and latency, gate skips, and fallback errors. Phone
 playback progress proves media time advanced in `AVPlayer` — it is *not* proof
 that sound reached the car speakers.
 
+Two helpers exist for the failures logs cannot show:
+
+```bash
+./beacon.sh 30                          # speak the time every 30s
+./say.sh "$(cat test-story.txt)"        # fixed prose fixture, for A/B-ing voices
+```
+
+`beacon.sh` makes silence diagnostic. A dead stream and "Claude hasn't replied
+yet" sound identical; with the beacon running you learn not just *whether*
+playback died but exactly *when* — the last time you hear is the moment it went.
+Lock the phone, pocket it, and listen. `test-story.txt` is a stable prose sample
+worth reusing when comparing `KOKORO_VOICE` options, since voice quality
+judgements only mean something against fixed text.
+
 **Rolling back:** set `LIVE_NARRATION=0` to drop to Stop-hook speech, or check
 out an earlier commit. See [`docs/ROLLBACK.md`](docs/ROLLBACK.md).
 
