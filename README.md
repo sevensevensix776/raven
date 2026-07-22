@@ -72,7 +72,7 @@ The writer always emits either speech or an idle floor. The proven default is lo
 
 ### The HLS encoder is persistent
 
-There is one long-lived encoder, one FIFO, and one monotonically advancing HLS stream. Interrupt and skip work must kill only the disposable per-clip decoder. It must never kill `.ffmpeg.pid`, close or recreate `pcm.fifo`, or restart the HLS timeline. The committed latest-wins design is documented in [`docs/INTERRUPT_DESIGN.md`](docs/INTERRUPT_DESIGN.md).
+There is one long-lived encoder, one FIFO, and one monotonically advancing HLS stream. Interrupt and skip work must kill only the disposable per-clip decoder. It must never kill `.ffmpeg.pid`, close or recreate `pcm.fifo`, or restart the HLS timeline. The committed latest-wins design is documented in [ADR 0010](docs/adr/0010-latest-wins-interrupt.md).
 
 ### Queue commits are atomic
 
@@ -112,7 +112,7 @@ raven diagnose
 ~/code/experiments/raven/stop.sh
 ```
 
-Stopping removes the four PID files and sweeps known child processes. It does not delete recent queue jobs; the writer independently discards jobs older than ten minutes.
+Stopping removes the five PID files and sweeps known child processes. It does not delete recent queue jobs; the writer independently discards jobs older than ten minutes.
 
 ### Connect the phone
 
@@ -207,8 +207,8 @@ The API has no application-level authentication. Its boundary is the Tailscale a
 - **Summarization is off and untuned.** With `SUMMARIZE=0` and `MAX_SPOKEN_CHARS=0`, a long Claude reply becomes a long spoken clip. The existing summarizer is guarded but not yet drive-tuned.
 - **Long replies have a synthesis wait (time-to-first-word).** Kokoro synthesizes the whole reply before it plays — measured ~15s for a ~2,500-char reply. The writer waits for synthd rather than racing it with `say` (that race caused double-speak; fixed). So a long reply is preceded by that much comfort-noise hiss. The necessary fix is per-sentence streaming synthesis (first sentence in ~0.3s) — see [`docs/SCOPE_STREAMING_SYNTHESIS.md`](docs/SCOPE_STREAMING_SYNTHESIS.md).
 - **Foreground data and background audio are different.** HLS audio continues under the iOS background-audio mode. Channel polling, transcript polling, and `/log` uploads run only while the app scene is active.
-- **Current playback is FIFO once a clip starts.** Ready audio is consumed oldest-first and the writer currently lets the active clip finish. Hard latest-wins interruption and manual Skip are designed, not yet implemented; see [`docs/INTERRUPT_DESIGN.md`](docs/INTERRUPT_DESIGN.md). Sentence-boundary preemption is the later refinement in [`docs/SCOPE_SENTENCE_CUT.md`](docs/SCOPE_SENTENCE_CUT.md).
-- **Only completed turns are narrated — interrupted ones are silently skipped.** Raven speaks on the `Stop` hook, which Claude Code fires on a *clean* turn completion. If you send a new message before a turn finishes (rapid back-and-forth), that turn is interrupted, `Stop` never fires, and the reply is never queued or spoken. Diagnostic signature: `queued` events in `logs/events.jsonl` stop while you keep getting replies on screen; a manually-fired `Stop` for the pinned session queues normally. For normal use (dictate → let Claude work → hear it) this never triggers. The fix is transcript-tailing, which narrates completed text *blocks* regardless of interruption — see [`docs/SCOPE_LIVE_NARRATION.md`](docs/SCOPE_LIVE_NARRATION.md).
+- **Current playback is FIFO once a clip starts.** Ready audio is consumed oldest-first and the writer lets the active clip finish. Switching channels drops the old session's *queued* audio immediately, but the clip already playing still finishes. Hard latest-wins interruption and manual Skip are decided but unbuilt — see [ADR 0010](docs/adr/0010-latest-wins-interrupt.md) and the roadmap in [`docs/FUTURE_WORK.md`](docs/FUTURE_WORK.md).
+- **Narration follows completed text blocks, not whole turns.** With `LIVE_NARRATION=1`, `raven tail` speaks each block as it lands, so multi-step and interrupted turns are both narrated. Turn live narration off and Raven falls back to the `Stop` hook alone — and Claude Code fires `Stop` only on a *clean* turn completion, so a turn you interrupt with a new message is never spoken. Diagnostic signature in that fallback mode: `queued` events in `logs/events.jsonl` stop while replies keep appearing on screen.
 - **No listener means no delivery.** The queue is held when the playlist heartbeat is stale, then resumes when a listener returns. Jobs that become more than ten minutes old are dropped instead of reading stale replies on reconnect.
 - **Character caps are blunt.** Any positive `MAX_SPOKEN_CHARS` value cuts bytes, not sentences. Keep it at `0` unless a hard cap is more important than a clean ending.
 - **Raven is tailnet-specific, and you configure the address once.** There is no service discovery and no in-app settings screen. The Mac's listen address comes from `RAVEN_BIND` (see [First-time setup](#first-time-setup)) and the iPhone app is built against `RAVEN_HOST`; both ship with safe placeholder defaults, so a fresh clone binds loopback until you point it at your own Tailscale address.

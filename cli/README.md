@@ -2,7 +2,7 @@
 
 Raven speaks Claude Code’s replies through an iPhone so a session can keep moving while its user is driving. This repository is the completed Go port of Raven’s Bash/Python orchestration and diagnostics. The ML boundary stays where it belongs: `synthd` still uses Python, Kokoro, and `mlx-audio`, for which there is no useful Go binding.
 
-> **Current scope:** All four commands—`raven hook`, `raven serve`, `raven write`, and `raven diagnose`—are implemented. The migration is complete except for the intentionally Python `synthd`.
+> **Current scope:** All five commands—`raven hook`, `raven serve`, `raven write`, `raven diagnose`, and `raven tail`—are implemented and are what the live pipeline runs. The migration is complete except for the intentionally Python `synthd`.
 
 ## Safety: parity before replacement
 

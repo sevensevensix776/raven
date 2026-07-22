@@ -147,4 +147,4 @@ The service base URL comes from the `RAVEN_HOST` build setting → `Info.plist` 
 - **Mute is local.** It does not pause the player, stop HLS requests, or prevent the Mac from treating the phone as a live listener.
 - **The app shows emitted transcript, not guaranteed acoustic delivery.** A row appears when the Mac starts writing audio. `EarPlayback.log` proves player progress, not speaker output or complete comprehension.
 - **Raven currently exposes no Skip control.** Latest-wins and manual Skip are designed on the Mac side but are not implemented in this app.
-- **Portrait iPhone only.** The target requires iOS 17, arm64, and iPhone device family; there is no iPad or Mac Catalyst target.
+- **Portrait iPhone only.** The target requires iOS 26, arm64, and iPhone device family; there is no iPad or Mac Catalyst target.

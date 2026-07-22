@@ -22,7 +22,7 @@ When a newer reply arrives for the selected channel, the newer reply wins:
 
 Manual Skip follows the same server-side mechanism and is immediate. Automatic latest-wins should first ship as a hard cut. A later refinement may defer automatic preemption to the next Kokoro/misaki sentence-sized part; manual Skip remains immediate.
 
-This policy is designed in [`../INTERRUPT_DESIGN.md`](../INTERRUPT_DESIGN.md) but is not current production behavior. The current writer plays an active clip to completion.
+This policy is not current production behavior. The current writer plays an active clip to completion.
 
 ## Consequences
 

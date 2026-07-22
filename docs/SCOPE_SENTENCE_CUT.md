@@ -8,7 +8,7 @@ This document defines a stage-2 refinement to Raven's committed latest-wins inte
 
 1. [`SCOPE_STREAMING_SYNTHESIS.md`](SCOPE_STREAMING_SYNTHESIS.md) supplies the
    ordered per-reply part protocol and must be implemented first; and
-2. [`INTERRUPT_DESIGN.md`](INTERRUPT_DESIGN.md) supplies the latest-wins and
+2. [ADR 0010](adr/0010-latest-wins-interrupt.md) supplies the latest-wins and
    manual-Skip control plane and must be device-proven before automatic
    boundary cuts are enabled.
 
@@ -60,7 +60,7 @@ fallback.
 Sentence cut adds only latest-wins awareness around that protocol:
 
 - before spending compute on the next unpublished part, `synthd` may stop work
-  on a superseded reply according to `INTERRUPT_DESIGN.md`;
+  on a superseded reply according to [ADR 0010](adr/0010-latest-wins-interrupt.md);
 - already published parts remain immutable; and
 - if synthesis is terminated early, publish the protocol's terminal partial
   marker so the writer cannot wait forever or interleave replies accidentally.
@@ -92,7 +92,7 @@ Only the per-chunk decoder is disposable. Never kill `.ffmpeg.pid`, close `pcm.f
 
 ## Composition with latest-wins
 
-[`INTERRUPT_DESIGN.md`](INTERRUPT_DESIGN.md) defines the control plane and safety model:
+[ADR 0010](adr/0010-latest-wins-interrupt.md) defines the control plane and safety model:
 
 - `.latest` names the only reply worth delivering;
 - `.interrupt` communicates new-reply and manual-skip events;

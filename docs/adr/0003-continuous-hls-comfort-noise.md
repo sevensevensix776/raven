@@ -35,7 +35,7 @@ Maintain one endless PCM timeline and one persistent HLS encoder:
 - **Restart HLS on every reply or interruption.** Rejected because it discards the live edge and forces the phone to recover a new timeline.
 - **No idle output.** Rejected because closing or starving the FIFO can end or stall the stream.
 
-See the [README invariants](../../README.md#load-bearing-invariants), [`../diagram-decisions.mmd`](../diagram-decisions.mmd), and [`../INTERRUPT_DESIGN.md`](../INTERRUPT_DESIGN.md).
+See the [README invariants](../../README.md#load-bearing-invariants), [`../diagram-decisions.mmd`](../diagram-decisions.mmd), and [ADR 0010](0010-latest-wins-interrupt.md).
 
 > **Later (2026-07-21):** segment length was tuned from two seconds to one, with
 > an eight-segment playlist, to cut live-edge latency roughly in half; measured
