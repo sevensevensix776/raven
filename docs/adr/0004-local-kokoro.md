@@ -28,6 +28,6 @@ Use `prince-canuma/Kokoro-82M` locally with the `af_heart` voice as Raven's prim
 - **ElevenLabs Conversational AI.** Rejected on sustained cost and the evaluated conversation cap.
 - **ElevenLabs Flash.** Better or comparable on some listening trials, but still cloud-billed and not enough better to outweigh local economics and privacy.
 - **macOS `say` as the primary voice.** Retained only as fallback; its robotic voice is less suitable for long technical narration.
-- **Qwen summarization before every reply.** This changes duration, not voice quality, and remains disabled and untuned. See [`../SCOPE_SUMMARIZATION.md`](../SCOPE_SUMMARIZATION.md).
+- **Qwen summarization before every reply.** This changes duration, not voice quality, and remains disabled and untuned. See [`../SUMMARIZATION.md`](../SUMMARIZATION.md).
 
 See [`../../synthd.py`](../../synthd.py) and the [tradeoff table](../TRADEOFFS.md).

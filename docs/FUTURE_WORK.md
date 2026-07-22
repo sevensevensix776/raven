@@ -48,20 +48,72 @@ Safe *refusal* is the feature here.
 ## Polish (nice, clearly below the two above)
 
 ### 3. Brevity mode + barge-in
-- **Brevity:** a narration mode that speaks the *outcome*, the key *caveat*, and
-  the *next question* — not the full prose reply. Long replies are a lot to listen
-  to at speed. (See [`SCOPE_SUMMARIZATION.md`](SCOPE_SUMMARIZATION.md); the
-  `SUMMARIZE` config flag already exists, off by default.)
-- **Barge-in:** let a new prompt or a spoken "stop" immediately cancel queued
-  narration at a sentence boundary. (See [`SCOPE_SENTENCE_CUT.md`](SCOPE_SENTENCE_CUT.md).)
+
+**Brevity:** a narration mode that speaks the *outcome*, the key *caveat*, and
+the *next question* — not the full prose reply. Long replies are a lot to listen
+to at speed. The `SUMMARIZE` flag already exists and is off by default; see
+[`SUMMARIZATION.md`](SUMMARIZATION.md) for what ships today and what has to be
+built before it can be turned on.
+
+**Barge-in:** let a new prompt or a spoken "stop" cancel queued narration at a
+sentence boundary. Today a channel switch drops *queued* audio immediately but
+lets the playing clip finish, so the cut lands after the current sentence
+([ADR 0010](adr/0010-latest-wins-interrupt.md)). True barge-in wants a bounded
+semantic unit — finish the current sentence-sized chunk, then switch — with
+manual Skip staying immediate. It depends on the parts protocol in §4: the
+writer checks for a newer utterance *between* chunks rather than killing a
+decoder mid-phoneme. The FIFO and the persistent HLS encoder must never stop
+during either transition.
 
 Both of these matter **more** than shaving first-word latency.
 
 ### 4. Streaming synthesis
-First spoken word in ~0.3s instead of ~1s by synthesizing sentence-by-sentence.
-(See [`SCOPE_STREAMING_SYNTHESIS.md`](SCOPE_STREAMING_SYNTHESIS.md).) Genuinely
-lower priority — the perceived delay today is dominated by HLS buffering (already
-tuned to 1s segments) and by reply *length*, not by synthesis start time.
+
+First spoken word in well under a second instead of waiting for the whole block.
+Genuinely lower priority: the perceived delay is dominated by HLS buffering
+(already tuned to 1 s segments) and by reply *length*, not by synthesis start
+time. It matters most for long blocks — a warm Kokoro render of ~2,500
+characters takes about 15 seconds, and the driver hears comfort noise for all of
+it.
+
+**Approach.** Change the unit `synthd` publishes from one whole-block WAV to an
+ordered stream of WAV parts, and let the writer start part `001` as soon as it
+is atomically visible while later parts render behind playback.
+
+Constraints worth keeping from the detailed draft:
+
+- **Reuse Kokoro/misaki's existing chunking.** Its generator already segments and
+  yields ordered audio. Do not add a second sentence regex or tokenizer.
+- **Contiguous, zero-padded, one-based part names**, published atomically
+  (temp file → fsync → rename). Never publish `003` before `002`, never revise a
+  published part.
+- **A terminal `complete.json` written last** is the *only* proof no more parts
+  are coming, and its `part_count` is authoritative. Without it, a temporarily
+  missing part looks identical to end-of-reply, and a later fully-synthesized
+  reply can interleave into a still-rendering one.
+- **Decode only the exact next index.** Never skip a gap because a higher part
+  happens to exist; emit comfort noise while waiting.
+- **Never fall back to a whole-reply `say` clip after part `001` has played.**
+  That recreates the double-speak bug this project already fixed once. Publish a
+  `status=partial` marker and close the reply instead.
+- **A per-reply consumed cursor** so a writer restart cannot replay part `001`.
+- **Ship behind a flag** (`STREAM_SYNTH=0` default) with the whole-block path
+  intact as rollback.
+
+**Acceptance:** queue commit to first speech PCM under one second for a warm
+model, versus the measured ~15 s; parts play exactly once in order; the FIFO
+never reaches EOF and the encoder PID never changes; a following reply cannot
+start until the active reply's terminal marker exists and all its parts are
+consumed. Prove it on the locked phone and the car route — gapless Mac PCM does
+not prove the head unit heard every boundary.
+
+**Honest limits:** this reduces time-to-first-word, not Kokoro's total compute or
+the reply's spoken duration (summarization is the lever for duration), and it
+does not touch the downstream HLS/player latency. Separate generator yields may
+expose small prosody or loudness seams at boundaries.
+
+<sub>The full protocol drafts (`SCOPE_STREAMING_SYNTHESIS.md`, `SCOPE_SENTENCE_CUT.md`) were
+folded into this section and removed; `git log --diff-filter=D -- docs/` recovers them.</sub>
 
 ---
 

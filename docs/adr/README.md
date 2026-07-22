@@ -16,11 +16,12 @@ These records capture the architectural choices behind Raven. They describe why 
 | [0010](0010-latest-wins-interrupt.md) | Latest-wins interruption | Accepted; implementation deferred |
 | [0011](0011-no-token-streaming.md) | No token-level streaming under the subscription constraint | Accepted |
 | [0012](0012-uncapped-replies.md) | Uncapped spoken replies | Accepted |
+| [0013](0013-target-current-ios-only.md) | Target only the current phone's iOS (iOS 26) | Accepted |
+| [0014](0014-channel-names-local-title.md) | Channel names come from the local session title, not Remote Control | Accepted |
+| [0015](0015-tailer-single-producer.md) | One producer for the speech queue: the tailer, with the Stop hook yielding | Accepted |
 
 ## Status convention
 
 - **Accepted** means the decision governs the system.
 - **Accepted; implementation deferred** means the policy is chosen and its design is documented, but current production behavior has not yet changed.
 - A future record should supersede, rather than silently rewrite, a decision whose underlying constraints change.
-- [0013 — Target only the current phone's iOS (iOS 26)](0013-target-current-ios-only.md)
-- [0014 — Channel names come from the local session title, not Remote Control](0014-channel-names-local-title.md)

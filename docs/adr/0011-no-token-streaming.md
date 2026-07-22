@@ -29,7 +29,15 @@ Treat transcript-tailing live narration as a separate, higher-risk feature that 
 
 - **Agent SDK partial messages.** Rejected because it requires an API key and separate credit billing.
 - **Extract token deltas from Claude Code transcript JSONL.** Ruled out by inspection; those records are not present.
-- **Sentence-streamed synthesis after `Stop`.** Accepted substitute and the recommended next build; see [`../SCOPE_STREAMING_SYNTHESIS.md`](../SCOPE_STREAMING_SYNTHESIS.md).
+- **Sentence-streamed synthesis after `Stop`.** Accepted substitute and the recommended next build; see [`../FUTURE_WORK.md`](../FUTURE_WORK.md).
 - **Tail complete transcript blocks before `Stop`.** Scoped as live narration, not token streaming; see [`../LIVE_NARRATION.md`](../LIVE_NARRATION.md).
 
 See [ADR 0005](0005-claude-code-hooks.md).
+
+> **Later (2026-07-22):** live narration shipped. Speaking completed assistant
+> blocks mid-turn is now the default path, and the ownership and deduplication
+> complexity anticipated above was resolved by making the tailer the sole
+> producer rather than reconciling two — see [ADR 0015](0015-tailer-single-producer.md)
+> and [`../LIVE_NARRATION.md`](../LIVE_NARRATION.md). The decision recorded here
+> is unchanged: this is block-level narration, not token streaming, which remains
+> unavailable on the subscription path.

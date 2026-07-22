@@ -4,6 +4,10 @@ Field-test results from real drives. Newest first. The point is to capture what
 the pipeline actually did on the road — not what it does on a bench — plus the
 subjective read that logs can't show.
 
+> Entries are **point-in-time observations**. Recommendations recorded in a drive
+> entry reflect what was true that day and are not the current roadmap — several
+> have since shipped. The live roadmap is [`FUTURE_WORK.md`](FUTURE_WORK.md).
+
 ---
 
 ## Drive 1 — 2026-07-18 (first real-world drive)
@@ -55,7 +59,7 @@ enough that nothing was lost.
    it's a live broadcast with no rewind, so a dead zone mid-reply drops the rest
    (the app reconnects at the live edge by design, to avoid replaying stale
    audio). Mitigations: **summarization** (keep replies short →
-   [`SCOPE_SUMMARIZATION.md`](SCOPE_SUMMARIZATION.md)) shrinks the exposure
+   [`SUMMARIZATION.md`](SUMMARIZATION.md)) shrinks the exposure
    window, and the **transcript** is the always-available fallback — read what
    you missed by ear (now formatted).
 4. **Two "I didn't hear it" scares, both non-bugs.** (a) A rapid back-and-forth
@@ -72,11 +76,11 @@ Stop = too late), not audio quality or reliability.
 
 ### Next builds this drive motivates (in priority order)
 
-1. **[Streaming synthesis](SCOPE_STREAMING_SYNTHESIS.md)** — first word in ~0.3s
+1. **[Streaming synthesis](FUTURE_WORK.md)** — first word in ~0.3s
    instead of waiting for the whole reply to render. Self-contained, low risk.
 2. **[Live narration](LIVE_NARRATION.md)** — the "start before Stop" fix;
    also closes the interrupted-turn gap. Higher risk (rewires who owns speaking).
-3. **[Summarization](SCOPE_SUMMARIZATION.md)** — shorten long replies so they're
+3. **[Summarization](SUMMARIZATION.md)** — shorten long replies so they're
    less exposed to dead zones and less tedious.
 
 ### Not yet measured

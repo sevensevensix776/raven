@@ -35,4 +35,4 @@ Address the two resulting concerns separately:
 - **Race `say` after a fixed timeout.** Rejected after it produced double-speak.
 - **Sentence-streamed synthesis.** Accepted as the recommended latency fix; it starts earlier without deleting content.
 
-See [`../SCOPE_STREAMING_SYNTHESIS.md`](../SCOPE_STREAMING_SYNTHESIS.md), [`../SCOPE_SUMMARIZATION.md`](../SCOPE_SUMMARIZATION.md), and [ADR 0010](0010-latest-wins-interrupt.md).
+See [`../FUTURE_WORK.md`](../FUTURE_WORK.md), [`../SUMMARIZATION.md`](../SUMMARIZATION.md), and [ADR 0010](0010-latest-wins-interrupt.md).

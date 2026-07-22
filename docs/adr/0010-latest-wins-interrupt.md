@@ -30,7 +30,7 @@ This policy is not current production behavior. The current writer plays an acti
 - A hard cut can land mid-word or mid-sentence and sound jarring.
 - Queue, synthesis, transcript, and writer state need explicit completed, preempted, skipped, and superseded outcomes.
 - The persistent encoder and FIFO become inviolable during interrupt work.
-- Sentence-boundary preemption depends on the not-yet-built streaming-part protocol in [`../SCOPE_STREAMING_SYNTHESIS.md`](../SCOPE_STREAMING_SYNTHESIS.md).
+- Sentence-boundary preemption depends on the not-yet-built streaming-part protocol in [`../FUTURE_WORK.md`](../FUTURE_WORK.md).
 - The iPhone may still have 4–8 seconds of old HLS buffer after the Mac cuts; a client live-edge seek can discard that buffer only after server-side production stops.
 
 ## Alternatives considered
@@ -41,4 +41,4 @@ This policy is not current production behavior. The current writer plays an acti
 - **Sentence-boundary cuts from the first implementation.** Deferred until hard interruption and sentence-streamed parts are independently proven.
 - **Client-only seek.** Insufficient because the live edge remains old content while the Mac writer continues producing it.
 
-See [`../SCOPE_SENTENCE_CUT.md`](../SCOPE_SENTENCE_CUT.md) and the [freshness tradeoff](../TRADEOFFS.md).
+See [`../FUTURE_WORK.md`](../FUTURE_WORK.md) and the [freshness tradeoff](../TRADEOFFS.md).

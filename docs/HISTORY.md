@@ -2,6 +2,12 @@
 
 Raven is the voice-out half of a hands-free Claude Code workflow. It turns the selected Claude Code session's completed replies into a continuous live audio stream on a Mac and plays that stream through an iPhone, including while the phone is locked. Raven does not listen, transcribe, or submit prompts. Voice-in remains Claude Code Remote Control plus iOS dictation.
 
+> **This is a historical record, not current documentation.** It describes the
+> project as of 2026-07-18 and is deliberately not updated as Raven changes. For
+> what runs today see the [README](../README.md); for what shipped after this was
+> written see [`LIVE_NARRATION.md`](LIVE_NARRATION.md); for the roadmap see
+> [`FUTURE_WORK.md`](FUTURE_WORK.md).
+
 The project was built in one concentrated session from 2026-07-16 through 2026-07-18. The sequence below is known; except where a date is explicitly stated, the source material does not establish a more precise phase-by-phase timestamp.
 
 ## Compact timeline
@@ -150,12 +156,12 @@ Token-level streaming was investigated and ruled out under the accepted subscrip
 
 Two subscription-safe improvements were scoped:
 
-- **Sentence-streamed synthesis** is the recommended next build. The Stop hook still supplies a complete reply, but `synthd` publishes ordered Kokoro/misaki audio parts as they are generated. The writer can start part 001 in under a second on the Mac while later parts render behind playback. See [`SCOPE_STREAMING_SYNTHESIS.md`](SCOPE_STREAMING_SYNTHESIS.md).
+- **Sentence-streamed synthesis** is the recommended next build. The Stop hook still supplies a complete reply, but `synthd` publishes ordered Kokoro/misaki audio parts as they are generated. The writer can start part 001 in under a second on the Mac while later parts render behind playback. See [`FUTURE_WORK.md`](FUTURE_WORK.md).
 - **Live narration** would tail complete assistant blocks from the Claude transcript and speak useful progress before `Stop` — feasible but higher-risk, because it changes ownership of speech and must coordinate with the Stop hook exactly once. **This shipped after this history was written**, though with a simpler coordination model than the one scoped here; see [`LIVE_NARRATION.md`](LIVE_NARRATION.md) for what was actually built.
 
-The accepted latest-wins policy is also designed but not implemented: a newer selected-session reply should preempt stale audio while preserving the persistent encoder and FIFO. The first version cuts immediately; the later refinement waits for a sentence-sized part boundary. See [ADR 0010](adr/0010-latest-wins-interrupt.md) and [`SCOPE_SENTENCE_CUT.md`](SCOPE_SENTENCE_CUT.md).
+The accepted latest-wins policy is also designed but not implemented: a newer selected-session reply should preempt stale audio while preserving the persistent encoder and FIFO. The first version cuts immediately; the later refinement waits for a sentence-sized part boundary. See [ADR 0010](adr/0010-latest-wins-interrupt.md) and [`FUTURE_WORK.md`](FUTURE_WORK.md).
 
-Summarization exists behind a disabled flag and remains untuned. It addresses total listening duration, not startup latency, and must never turn a valid reply into silence. Its current status is documented in [`SCOPE_SUMMARIZATION.md`](SCOPE_SUMMARIZATION.md).
+Summarization exists behind a disabled flag and remains untuned. It addresses total listening duration, not startup latency, and must never turn a valid reply into silence. Its current status is documented in [`SUMMARIZATION.md`](SUMMARIZATION.md).
 
 ![Raven architectural decisions](raven-decisions.png)
 
