@@ -151,9 +151,9 @@ Token-level streaming was investigated and ruled out under the accepted subscrip
 Two subscription-safe improvements were scoped:
 
 - **Sentence-streamed synthesis** is the recommended next build. The Stop hook still supplies a complete reply, but `synthd` publishes ordered Kokoro/misaki audio parts as they are generated. The writer can start part 001 in under a second on the Mac while later parts render behind playback. See [`SCOPE_STREAMING_SYNTHESIS.md`](SCOPE_STREAMING_SYNTHESIS.md).
-- **Live narration** would tail complete assistant blocks from the Claude transcript and speak useful progress before `Stop`. It is feasible but higher-risk because it changes ownership of speech, adds deduplication and recovery state, and must coordinate with the Stop hook exactly once. See [`SCOPE_LIVE_NARRATION.md`](SCOPE_LIVE_NARRATION.md).
+- **Live narration** would tail complete assistant blocks from the Claude transcript and speak useful progress before `Stop` — feasible but higher-risk, because it changes ownership of speech and must coordinate with the Stop hook exactly once. **This shipped after this history was written**, though with a simpler coordination model than the one scoped here; see [`LIVE_NARRATION.md`](LIVE_NARRATION.md) for what was actually built.
 
-The accepted latest-wins policy is also designed but not implemented: a newer selected-session reply should preempt stale audio while preserving the persistent encoder and FIFO. The first version cuts immediately; the later refinement waits for a sentence-sized part boundary. See [ADR 0010](adr/0010-latest-wins-interrupt.md), [ADR 0010](adr/0010-latest-wins-interrupt.md), and [`SCOPE_SENTENCE_CUT.md`](SCOPE_SENTENCE_CUT.md).
+The accepted latest-wins policy is also designed but not implemented: a newer selected-session reply should preempt stale audio while preserving the persistent encoder and FIFO. The first version cuts immediately; the later refinement waits for a sentence-sized part boundary. See [ADR 0010](adr/0010-latest-wins-interrupt.md) and [`SCOPE_SENTENCE_CUT.md`](SCOPE_SENTENCE_CUT.md).
 
 Summarization exists behind a disabled flag and remains untuned. It addresses total listening duration, not startup latency, and must never turn a valid reply into silence. Its current status is documented in [`SCOPE_SUMMARIZATION.md`](SCOPE_SUMMARIZATION.md).
 

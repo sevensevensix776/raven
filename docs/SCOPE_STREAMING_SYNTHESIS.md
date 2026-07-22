@@ -32,7 +32,7 @@ contains complete assistant text blocks and no `stream_event`,
 
 This scope begins only after the Stop hook receives a completed reply. Earlier
 speech from completed transcript blocks is a separate stage-2 design in
-[`SCOPE_LIVE_NARRATION.md`](SCOPE_LIVE_NARRATION.md).
+[`LIVE_NARRATION.md`](LIVE_NARRATION.md).
 
 ## Goals and non-goals
 
@@ -343,7 +343,7 @@ Per-part emission is the prerequisite for sentence-boundary interruption in
 this directory, ordering, cursor, and terminal-marker protocol, then add a
 latest-wins check between parts. It must not invent a second chunk format.
 
-[`SCOPE_LIVE_NARRATION.md`](SCOPE_LIVE_NARRATION.md) changes when complete text
+[`LIVE_NARRATION.md`](LIVE_NARRATION.md) changes when complete text
 blocks enter the queue. Each narrated block can still use this streaming
 synthesis path. Build and prove this scope first; live narration has a separate
 deduplication and Stop-hook ownership problem.

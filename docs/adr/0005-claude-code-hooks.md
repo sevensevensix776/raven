@@ -32,7 +32,7 @@ The hook is fail-silent so narration cannot block a Claude Code turn. Operationa
 ## Alternatives considered
 
 - **Agent SDK.** Rejected because it requires API-key authentication and separate billing under the accepted constraint.
-- **Poll or tail the transcript as the sole owner of speech.** Deferred as the higher-risk live-narration design; exactly-once coordination and Stop recovery are more complex. See [`../SCOPE_LIVE_NARRATION.md`](../SCOPE_LIVE_NARRATION.md).
+- **Poll or tail the transcript as the sole owner of speech.** Deferred as the higher-risk live-narration design; exactly-once coordination and Stop recovery are more complex. (Later shipped — see the note below.) See [`../LIVE_NARRATION.md`](../LIVE_NARRATION.md).
 - **Add a Remote Control-specific transport.** Rejected because session hooks already fire for those turns.
 - **Fork or wrap Claude Code.** Rejected because it adds release-cadence coupling without solving a missing transport.
 

@@ -48,7 +48,7 @@ enough that nothing was lost.
    latency the driver *feels* is not the speaking — it's **when we tap**: the
    `Stop` hook fires only when the whole turn completes, which is too late for a
    turn with tool calls. This is the #1 thing to fix. The fix is already scoped:
-   [`SCOPE_LIVE_NARRATION.md`](SCOPE_LIVE_NARRATION.md) — speak completed text
+   [`LIVE_NARRATION.md`](LIVE_NARRATION.md) — speak completed text
    blocks *during* the turn, before Stop. (Asif independently flagged this on the
    drive: "start speech before the hook stops.")
 3. **Long replies are fragile on a live stream.** A ~3-minute reply is exposed:
@@ -74,7 +74,7 @@ Stop = too late), not audio quality or reliability.
 
 1. **[Streaming synthesis](SCOPE_STREAMING_SYNTHESIS.md)** — first word in ~0.3s
    instead of waiting for the whole reply to render. Self-contained, low risk.
-2. **[Live narration](SCOPE_LIVE_NARRATION.md)** — the "start before Stop" fix;
+2. **[Live narration](LIVE_NARRATION.md)** — the "start before Stop" fix;
    also closes the interrupted-turn gap. Higher risk (rewires who owns speaking).
 3. **[Summarization](SCOPE_SUMMARIZATION.md)** — shorten long replies so they're
    less exposed to dead zones and less tedious.

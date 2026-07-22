@@ -30,6 +30,6 @@ Treat transcript-tailing live narration as a separate, higher-risk feature that 
 - **Agent SDK partial messages.** Rejected because it requires an API key and separate credit billing.
 - **Extract token deltas from Claude Code transcript JSONL.** Ruled out by inspection; those records are not present.
 - **Sentence-streamed synthesis after `Stop`.** Accepted substitute and the recommended next build; see [`../SCOPE_STREAMING_SYNTHESIS.md`](../SCOPE_STREAMING_SYNTHESIS.md).
-- **Tail complete transcript blocks before `Stop`.** Scoped as live narration, not token streaming; see [`../SCOPE_LIVE_NARRATION.md`](../SCOPE_LIVE_NARRATION.md).
+- **Tail complete transcript blocks before `Stop`.** Scoped as live narration, not token streaming; see [`../LIVE_NARRATION.md`](../LIVE_NARRATION.md).
 
 See [ADR 0005](0005-claude-code-hooks.md).

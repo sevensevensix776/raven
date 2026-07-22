@@ -157,7 +157,7 @@ boundaries require it.
 
 ## Composition with live narration
 
-[`SCOPE_LIVE_NARRATION.md`](SCOPE_LIVE_NARRATION.md) can enqueue multiple
+[`LIVE_NARRATION.md`](LIVE_NARRATION.md) can enqueue multiple
 completed assistant blocks during one Claude turn. Each block is an ordinary
 reply job using the shared streaming-part protocol. If a newer block arrives
 while an older block is speaking, this policy may hand off at the next part
