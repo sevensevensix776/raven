@@ -74,13 +74,21 @@ cd cli && ./install.sh && cd ..
 tailscale ip -4                              # e.g. 100.x.y.z
 cp config.local.sh.example config.local.sh   # set RAVEN_BIND=<that-ip>:8080
 
-# 4. Start the pipeline
+# 4. Start the pipeline, and keep it started across reboots
 ./start.sh
+./install-watchdog.sh                        # LaunchAgent: restarts it if it dies
 raven diagnose                               # non-zero exit = not serving
 
 # 5. Prove the audio path before involving Claude
 ./say.sh "Raven audio path is live."
 ```
+
+**Install the watchdog.** Without it, a reboot leaves Raven dead until you
+notice — and you may not, because the Claude Code hook is spawned per event
+rather than running as a daemon, so it keeps queueing speech into a queue with
+nothing draining it. A dead pipeline sounds exactly like Claude having nothing
+to say. The watchdog checks every 60 seconds and restarts the whole pipeline if
+any process is missing.
 
 `config.local.sh` is gitignored, so your address never enters the repo.
 
@@ -149,7 +157,7 @@ playback in a way that unit tests will not catch.
 
 | Path | What it is |
 | --- | --- |
-| `/` (root) | The Mac runtime: `synthd.py`, `start.sh` / `stop.sh`, `config.sh`. `RAVEN_HOME` points here. |
+| `/` (root) | The Mac runtime: `synthd.py`, `start.sh` / `stop.sh`, `watchdog.sh`, `config.sh`. `RAVEN_HOME` points here. |
 | [`cli/`](cli/) | The `raven` Go binary — hook, tailer, server, writer, diagnostics. |
 | [`ios/`](ios/) | The iPhone app (SwiftUI; internal name *Ear*). |
 | [`docs/`](docs/) | [API reference](docs/API.md), [ADRs](docs/adr/), [live narration](docs/LIVE_NARRATION.md), [roadmap](docs/FUTURE_WORK.md), [history](docs/HISTORY.md). |
@@ -229,6 +237,20 @@ Lock the phone, pocket it, and listen. `test-story.txt` is a stable prose sample
 worth reusing when comparing `KOKORO_VOICE` options, since voice quality
 judgements only mean something against fixed text.
 
+**Heard nothing for a long time?** Check the pipeline is actually alive before
+assuming Claude was quiet:
+
+```bash
+raven diagnose                    # non-zero exit = not serving
+./watchdog.sh --verbose           # restarts it if anything is missing
+grep queued_but_pipeline_down logs/events.jsonl | tail
+launchctl list | grep raven       # is the watchdog installed?
+```
+
+`queued_but_pipeline_down` is the signature of the worst failure mode: speech
+was queued while no writer was running, so it will never play. With the
+watchdog installed this should self-heal within 60 seconds.
+
 **Rolling back:** set `LIVE_NARRATION=0` to drop to Stop-hook speech, or check
 out an earlier commit. See [`docs/ROLLBACK.md`](docs/ROLLBACK.md).
 
@@ -256,6 +278,11 @@ out an earlier commit. See [`docs/ROLLBACK.md`](docs/ROLLBACK.md).
   screen. The Mac address comes from `RAVEN_BIND`, the app is built against
   `RAVEN_HOST`, and both ship with loopback placeholders so a fresh clone is
   inert until you point it at your own tailnet.
+- **The Mac has to actually be running Raven.** `start.sh` is manual, so a
+  reboot kills the pipeline permanently unless the watchdog LaunchAgent is
+  installed. Producers now log `queued_but_pipeline_down` when they queue speech
+  with no writer alive, but nothing announces it *audibly* — see the audible
+  state protocol in [`docs/FUTURE_WORK.md`](docs/FUTURE_WORK.md).
 
 ## Security
 

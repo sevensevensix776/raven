@@ -172,7 +172,17 @@ func Run(stdin io.Reader) {
 	}
 	rlog.Log(home, "hook", "queued", map[string]any{
 		"id": stamp, "session": session, "project": project, "chars": len(cleaned),
+		"writer": WriterAlive(home),
 	})
+	if !WriterAlive(home) {
+		// Nothing will ever play this. Say so loudly: this is the one failure the
+		// producer can see but the driver cannot, because dead-pipeline silence
+		// sounds exactly like Claude having nothing to say.
+		rlog.Log(home, "hook", "queued_but_pipeline_down", map[string]any{
+			"id": stamp, "session": session, "project": project,
+			"hint": "run start.sh (or install the watchdog LaunchAgent)",
+		})
+	}
 }
 
 func dashDefault(s string) string {
@@ -190,8 +200,21 @@ func speakAll(home string) bool {
 // tailerAlive reports whether the live-narration tailer is running, via its
 // pidfile and a signal-0 liveness probe (same semantics as `kill -0`). Used by
 // the Stop hook to decide whether to yield final-block speech to the tailer.
-func tailerAlive(home string) bool {
-	b, err := os.ReadFile(filepath.Join(home, ".tail.pid"))
+func tailerAlive(home string) bool { return pidAlive(home, ".tail.pid") }
+
+// WriterAlive reports whether `raven write` — the process that drains the queue
+// into the audio timeline — is running. Producers use this to detect the failure
+// mode that is otherwise completely silent: the hook is spawned fresh by Claude
+// Code on every event, so it happily keeps queueing speech even when the whole
+// pipeline is dead. A Mac reboot with no writer running once buried 350 unplayed
+// clips over a day, and from the driver's side that is indistinguishable from
+// Claude simply having nothing to say.
+func WriterAlive(home string) bool { return pidAlive(home, ".writer.pid") }
+
+// pidAlive reports whether the pid recorded in home/<pidfile> is a live process.
+// Signal 0 performs the permission and existence checks without delivering.
+func pidAlive(home, pidfile string) bool {
+	b, err := os.ReadFile(filepath.Join(home, pidfile))
 	if err != nil {
 		return false
 	}

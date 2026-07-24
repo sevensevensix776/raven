@@ -273,7 +273,15 @@ func (r *runner) pass() {
 				rlog.Log(r.home, "tail", "narrated", map[string]any{
 					"session": session, "uuid": b.UUID, "index": b.Index,
 					"chars": len(b.Cleaned), "preview": preview(b.Cleaned, 80),
+					"writer": hook.WriterAlive(r.home),
 				})
+				if !hook.WriterAlive(r.home) {
+					// Queued with nothing to drain it — see hook.WriterAlive.
+					rlog.Log(r.home, "tail", "queued_but_pipeline_down", map[string]any{
+						"session": session, "uuid": b.UUID,
+						"hint": "run start.sh (or install the watchdog LaunchAgent)",
+					})
+				}
 			} else {
 				// Selection changed at commit time (or a rare write failure): don't
 				// speak into the wrong channel. Mark seen anyway — we never backfill
